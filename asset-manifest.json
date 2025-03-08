@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "/static/css/main.aec1caeb.css",
-    "main.js": "/static/js/main.a7a7d4ab.js",
+    "main.js": "/static/js/main.e6ffad0e.js",
     "static/media/Satoshi-VariableItalic.ttf": "/static/media/Satoshi-VariableItalic.9519fea9567e2405bc08.ttf",
     "static/media/Satoshi-Variable.ttf": "/static/media/Satoshi-Variable.536fda9b164542087fc7.ttf",
     "static/media/Satoshi-MediumItalic.ttf": "/static/media/Satoshi-MediumItalic.5db9ec801a311bdf187b.ttf",
@@ -40,10 +40,10 @@
     "static/media/Satoshi-Light.woff2": "/static/media/Satoshi-Light.df8f06167ee6fd05a131.woff2",
     "index.html": "/index.html",
     "main.aec1caeb.css.map": "/static/css/main.aec1caeb.css.map",
-    "main.a7a7d4ab.js.map": "/static/js/main.a7a7d4ab.js.map"
+    "main.e6ffad0e.js.map": "/static/js/main.e6ffad0e.js.map"
   },
   "entrypoints": [
     "static/css/main.aec1caeb.css",
-    "static/js/main.a7a7d4ab.js"
+    "static/js/main.e6ffad0e.js"
   ]
 }
