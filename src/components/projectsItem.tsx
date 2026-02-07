@@ -20,10 +20,10 @@ const ProjectListItem = (props: ProjectListItemProps) => (
     <p className="font-light text-offwhite opacity-50">{props.year}</p>
     <div
       className="
-        absolute bottom-[2px] left-0 right-0 h-[1px] origin-left scale-x-0 animate-slideOut bg-offwhite group-hover:scale-x-100 group-hover:animate-slideIn"
+        absolute bottom-[2px] left-0 right-0 h-[1px] origin-left scale-x-0 bg-offwhite group-hover:scale-x-100"
     ></div>
     {props.selected && (
-      <div className="absolute bottom-0 left-[-16px] top-0 m-auto h-1 w-1 rounded-xl bg-offwhite" />
+      <div className="absolute bottom-0 left-[-14px] top-0 m-auto h-1 w-1 rounded-xl bg-offwhite" />
     )}
   </div>
 );

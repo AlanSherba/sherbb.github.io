@@ -20,6 +20,32 @@ export const ProjectCategories: readonly string[] = [
 export const ProjectDatabase: readonly ProjectData[] = [
   {
     category: "Favorites",
+    title: "Animal Company",
+    subtitle: "#1 VR Game on Quest",
+    year: "25",
+    description: `1 Million monthly players, 400k+ Discord community, #1 seller of 2025.
+
+Animal Company is a chaotic virtual playground. Players socialize, explode each other, build contraptions, and go on spooky adventures.
+
+I directed the game from concept to #1 seller on quest. A chaotic, janky artifact of an amazing, passionate team. We threw everything at the wall and somehow built a space kids genuinely loved socializing in.`,
+    media: [
+      "ac/ac_hero.png",
+      "ac/ac_1.png",
+      "ac/ac_2.mp4",
+      "ac/ac_3.png",
+      "ac/ac_4.mp4",
+      "ac/ac_5.png",
+      "ac/ac_last.mp4",
+      "ac/ac_6.png",
+      "ac/ac_7.png",
+      "ac/ac_8.png",
+    ],
+    link: "https://www.meta.com/experiences/animal-company/7190422614401072/",
+    linkText: "Available on Meta Quest",
+  },
+
+  {
+    category: "Favorites",
     title: "Gridform",
     subtitle: "Published Indie Game",
     year: "22",
@@ -29,11 +55,14 @@ The project was started mid 2020 and took about 2 years of development before be
     media: [
       "gridform/gfHero.png",
       "gridform/gfGallery1.jpg",
-      "gridform/gfGallery2.jpg",
+      "gridform/gf_vid_1.webm",
+      "gridform/gfGallery6.jpg",
+      "gridform/gf_vid_2.webm",
       "gridform/gfGallery3.jpg",
+      "gridform/gf_vid_3.webm",
       "gridform/gfGallery4.jpg",
       "gridform/gfGallery5.jpg",
-      "gridform/gfGallery6.jpg",
+      "gridform/gfGallery2.jpg",
     ],
     link: "https://store.steampowered.com/app/1608710/Gridform/",
     linkText: "Available on Steam",
@@ -147,15 +176,13 @@ The Toolkit comes with tons of interactive components, validation, and cross pla
 
   {
     category: "Other",
-    title: "Deep Action",
-    subtitle: "Gameplay ECS",
-    year: "22",
-    description: `An experimental Object-Oriented ECS I use for creating and prototyping action games. The framework prioritizes using c# as the medium for defining entities rather then a GUI editor like creating Prefabs with Unity.
-
-Currently my "main" side project, and intended to be the foundation for my next large game.`,
-    media: ["deepAction/daHero.jpg"],
-    link: "https://github.com/Sherbb/DeepAction",
-    linkText: "View the Source",
+    title: "Less3",
+    subtitle: "3D Design Studio",
+    year: "??",
+    description: `I publish independent projects and games under the name Less3.`,
+    media: ["l3/l3_hero.png"],
+    link: "https://less3.design/",
+    linkText: "Check out Less3.design",
   },
 
   {

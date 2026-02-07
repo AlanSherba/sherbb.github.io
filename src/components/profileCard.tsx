@@ -1,32 +1,25 @@
-interface ProfileCardProps {
+import Panel from "./Panel";
+
+interface ProfileCardProps
+{
   background: boolean;
 }
-const ProfileCard = (props: ProfileCardProps) => {
+const ProfileCard = (props: ProfileCardProps) =>
+{
   return (
-    <div
-      className={
-        "rounded-[32px] p-8 " +
-        (props.background ? "border border-offwhite/[0.05] bg-offwhite/[0.03]" : "")
-      }
-    >
+    <Panel>
       <p className="text-4xl font-light">
         Alan Sherba
-        <span className="pl-0 text-sm opacity-30"> aka: Sherbb</span>
+        <span className="pl-0 text-sm opacity-30"> aka: Sherbb, Coda</span>
       </p>
-      <div className="h-4" />
+      <div className="h-2" />
       <p className="text-base font-light">
-        Gameplay <span className="font-black">Programmer</span>
-      </p>
-      <p className="text-base font-light">
-        UI, UX, Feel, Action, Game <span className="font-black">Designer</span>
+        <span className="font-black">Creative Director</span>
       </p>
       <p className="text-base font-light">
-        Unity <span className="font-black">Engineer</span>
+        Engineer, Designer, Artist, Gaming Enthusiast
       </p>
-      <p className="text-base font-light">
-        VFX, Tech <span className="font-black">Artist</span>
-      </p>
-    </div>
+    </Panel>
   );
 };
 

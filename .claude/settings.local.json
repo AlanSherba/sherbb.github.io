@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(if not exist \"C:\\\\GitRepos\\\\sherbb.github.io\\\\src\\\\hooks\" mkdir \"C:\\\\GitRepos\\\\sherbb.github.io\\\\src\\\\hooks\")"
+    ]
+  }
+}
