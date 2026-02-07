@@ -364,7 +364,7 @@ function App()
 
         {/* Content layer */}
         <div
-          className="absolute inset-0 flex flex-row gap-8 justify-center p-16 h-full w-full animate-fadeIn"
+          className="absolute inset-0 flex flex-row gap-8 justify-center p-16 h-full w-full"
           style={{ transform: "translateZ(50px)" }}
         >
           <div className="flex flex-row gap-8 justify-center overflow-clip h-full w-full">
