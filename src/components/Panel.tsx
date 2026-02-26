@@ -5,7 +5,7 @@ interface PanelProps extends React.HTMLAttributes<HTMLDivElement> {
 const Panel = ({ className, children, ...props }: PanelProps) => {
   return (
     <div
-      className={`p-6 bg-black border-l border-l-[#333333]${className ? ` ${className}` : ""}`}
+      className={`p-6 bg-black border-l-2 border-l-[#FFFFE355]${className ? ` ${className}` : ""}`}
       {...props}
     >
       {children}

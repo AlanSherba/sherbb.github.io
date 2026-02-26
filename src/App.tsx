@@ -10,13 +10,14 @@ import
 import { useSearchParams } from "react-router-dom";
 import ProfileCard from "./components/profileCard";
 import Panel from "./components/Panel";
-import useTilt from "./hooks/useTilt";
+import useMouseReveal from "./hooks/useMouseReveal";
 
 const prefetchedImages: HTMLImageElement[] = [];
 
 function App()
 {
-  const tiltRef = useTilt({ includePerspective: false });
+  const revealRefDots = useMouseReveal({ radius: 300, opacity: 0.1 });
+  const revealRefBg = useMouseReveal({ radius: 900, opacity: 0.7 });
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Pre-fetch all project media after page load so project switching feels instant
@@ -110,7 +111,7 @@ function App()
   {
     return (
       <div
-        className="flex flex-col gap-12 items-center justify-center"
+        className="flex flex-col gap-6 items-center justify-center"
         style={{
           width: "400px",
           minWidth: "400px",
@@ -118,7 +119,7 @@ function App()
           flexShrink: 0,
         }}
       >
-        <div className="self-start">
+        <div className="self-start w-full">
           <ProfileCard background />
         </div>
 
@@ -195,7 +196,7 @@ function App()
         style={{
           maxWidth: "600px",
           maxHeight: "60vh",
-          alignSelf: "center",
+          alignSelf: "flex-start",
           minHeight: 0,
         }}
         onAnimationEnd={() => setNewProjectAnimation(false)}
@@ -251,8 +252,8 @@ function App()
   {
     return (
       <Panel
-        className="flex flex-col items-left justify-center"
-        style={{ width: "400px", minWidth: "400px", maxWidth: "400px", height: "fit-content", alignSelf: "center" }}
+        className="flex flex-col items-left"
+        style={{ width: "400px", minWidth: "400px", maxWidth: "400px", height: "fit-content" }}
       >
         <text className="relative select-none text-4xl font-light">
           Projects
@@ -297,9 +298,8 @@ function App()
   {
     return (
       <div
-        className="flex flex-row gap-12"
+        className="flex flex-row gap-8 items-start"
         style={{
-          transformStyle: "preserve-3d",
         }}
       >
         {Hero()}
@@ -310,66 +310,52 @@ function App()
   };
 
   return (
-    <div style={{ perspective: "800px", position: "absolute", inset: 0, overflow: "hidden" }}>
-      <div ref={tiltRef} style={{ transformStyle: "preserve-3d", width: "100%", height: "100%" }}>
-        {/* BG Layer 1 — static dots */}
-        <div
-          className="pointer-events-none absolute h-[400%] w-[400%]"
-          style={{
-            top: "-150%",
-            left: "-150%",
-            backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
-            backgroundRepeat: "repeat",
-            backgroundColor: "black",
-            opacity: .1,
-            transform: "translateZ(-00px)",
-          }}
-        />
-        <div
-          className="pointer-events-none absolute h-[400%] w-[400%]"
-          style={{
-            top: "-150%",
-            left: "-150%",
-            backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
-            backgroundRepeat: "repeat",
-            backgroundColor: "black",
-            opacity: .2,
-            transform: "translateZ(-200px)",
-          }}
-        />
-        <div
-          className="pointer-events-none absolute h-[400%] w-[400%]"
-          style={{
-            top: "-150%",
-            left: "-150%",
-            backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
-            backgroundRepeat: "repeat",
-            backgroundColor: "black",
-            opacity: .3,
-            transform: "translateZ(-400px)",
-          }}
-        />
-        <div
-          className="pointer-events-none absolute h-[400%] w-[400%]"
-          style={{
-            top: "-150%",
-            left: "-150%",
-            backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
-            backgroundRepeat: "repeat",
-            backgroundColor: "black",
-            opacity: .4,
-            transform: "translateZ(-800px)",
-          }}
-        />
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+      {/* BG Layer 1 — static dots */}
+      <div
+        className="pointer-events-none absolute h-[400%] w-[400%]"
+        style={{
+          top: "-150%",
+          left: "-150%",
+          backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
+          backgroundRepeat: "repeat",
+          backgroundColor: "black",
+          opacity: .1,
+        }}
+      />
 
-        {/* Content layer */}
-        <div
-          className="absolute inset-0 flex flex-row gap-8 justify-center p-16 h-full w-full"
-          style={{ transform: "translateZ(50px)" }}
-        >
-          <div className="flex flex-row gap-8 justify-center overflow-clip h-full w-full">
-            {BodySection()}
-          </div>
+      {/* BG — mouse reveal spotlight */}
+      <div
+        ref={revealRefDots}
+        className="pointer-events-none absolute h-[400%] w-[400%]"
+        style={{
+          top: "-150%",
+          left: "-150%",
+          backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
+          backgroundRepeat: "repeat",
+          backgroundColor: "black",
+          opacity: .1,
+        }}
+      />
+      {/* BG — mouse reveal spotlight */}
+      <div
+        ref={revealRefBg}
+        className="pointer-events-none absolute h-[100%] w-[100%]"
+        style={{
+          backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg.png)`,
+          //backgroundColor: "black",
+          backgroundSize: "cover",           // Fill to fit
+          backgroundPosition: "center",      // Center the image
+          backgroundRepeat: "no-repeat",
+        }}
+      />
+
+      {/* Content layer */}
+      <div
+        className="absolute inset-0 flex flex-row gap-8 justify-center p-16 h-full w-full"
+      >
+        <div className="flex flex-row gap-8 justify-center items-center h-full w-full">
+          {BodySection()}
         </div>
       </div>
     </div>
