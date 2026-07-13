@@ -9,6 +9,10 @@ npm run deploy
 
 `Current`
 
+<img width="3116" height="2156" alt="image" src="https://github.com/user-attachments/assets/973f087f-38c7-47c8-af9e-4d48f3c99977" />
+
+`V2`
+
 <img width="3802" height="1881" alt="image" src="https://github.com/user-attachments/assets/6babc506-7d51-4c3a-9f7b-0f87f2a2fb72" />
 
 `V1`
