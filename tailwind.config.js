@@ -8,6 +8,11 @@ module.exports = {
       },
       colors: {
         offwhite: "#FFFFE3",
+        accent: "#2E62FF",
+      },
+      fontFamily: {
+        serif: ['"Instrument Serif"', "Georgia", "serif"],
+        mono: ['"JetBrains Mono"', "Menlo", "Consolas", "monospace"],
       },
       animation: {
         slideIn: "slideIn .4s ease-out",
@@ -17,6 +22,7 @@ module.exports = {
         fadeIn: "fadeIn 1.3s ease-in-out",
         fadeInFast: "fadeIn .3s ease-out",
         blobSpin: "blobSpin 200s infinite",
+        marquee: "marquee 100s linear infinite",
         buttonNotify: "buttonNotify 1s cubic-bezier(0.16, 1, 0.3, 1)",
       },
       keyframes: {
@@ -43,6 +49,10 @@ module.exports = {
         blobSpin: {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(360deg)" },
+        },
+        marquee: {
+          "0%": { transform: "translateX(-50%)" },
+          "100%": { transform: "translateX(0)" },
         },
         buttonNotify: {
           "0%": { transform: "scale(1,1)", opacity: "5" },

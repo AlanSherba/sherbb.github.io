@@ -31,17 +31,21 @@ code {
   background: #FFFFE3;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff2e transparent;
+}
+
 ::-webkit-scrollbar {
   scroll-behavior: smooth;
-  width: 4px;
+  width: 3px;
 }
 ::-webkit-scrollbar-track {
-  background-color: #ffffe324;
+  background-color: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: #ffffe3;
-  border-radius: 8px;
+  background-color: #ffffff2e;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #ffffe367;
+  background-color: #ffffff59;
 }

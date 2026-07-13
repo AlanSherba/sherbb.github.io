@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ProjectListItem from "./components/projectsItem";
 import
 {
@@ -8,16 +8,11 @@ import
 } from "./ProjectsDatabase";
 
 import { useSearchParams } from "react-router-dom";
-import ProfileCard from "./components/profileCard";
-import Panel from "./components/Panel";
-import useMouseReveal from "./hooks/useMouseReveal";
 
 const prefetchedImages: HTMLImageElement[] = [];
 
 function App()
 {
-  const revealRefDots = useMouseReveal({ radius: 300, opacity: 0.1 });
-  const revealRefBg = useMouseReveal({ radius: 900, opacity: 0.7 });
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Pre-fetch all project media after page load so project switching feels instant
@@ -61,17 +56,10 @@ function App()
     return ProjectDatabase[0];
   };
 
-  // Ummm.... basically storying the page stat in URL param. This lets you BACK out of gallery.
-  // And lets you share a link to a project and gallery view
+  // Storing the page state in URL param lets you share a link to a project
+  // and use browser BACK between projects.
   useEffect(() =>
   {
-    if (searchParams.get("project") !== selectedProject.title)
-    {
-      //close gallery on back.
-      setShowGallery(false);
-    }
-
-    setShowGallery(searchParams.get("view") === "gallery");
     for (let i = 0; i < ProjectDatabase.length; i++)
     {
       if (searchParams.get("project") === ProjectDatabase[i].title)
@@ -86,8 +74,14 @@ function App()
   const [selectedProject, setSelectedProject] =
     useState<ProjectData>(initProject());
 
-  const [newProjectAnimation, setNewProjectAnimation] = useState(false);
-  const [showGallery, setShowGallery] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const descriptionRef = useRef<HTMLElement>(null);
+
+  // Reset the description scroll position when switching projects
+  useEffect(() =>
+  {
+    descriptionRef.current?.scrollTo(0, 0);
+  }, [selectedProject]);
 
   const setProject = (projectTitle: string) =>
   {
@@ -99,134 +93,141 @@ function App()
     {
       if (ProjectDatabase[i].title === projectTitle)
       {
-        //setSelectedProject(ProjectDatabase[i]);
-        setNewProjectAnimation(true);
         setSearchParams({ project: ProjectDatabase[i].title });
         return;
       }
     }
   };
 
-  const Hero = () =>
+  const Header = () =>
   {
     return (
-      <div
-        className="flex flex-col gap-6 items-center justify-center"
-        style={{
-          width: "400px",
-          minWidth: "400px",
-          maxWidth: "400px",
-          flexShrink: 0,
-        }}
-      >
-        <div className="self-start w-full">
-          <ProfileCard background />
+      <header className="mx-auto flex w-full max-w-[1500px] flex-row items-baseline gap-8 pb-10 pl-[5.25rem] pr-16 pt-12">
+        <h1 className="whitespace-nowrap font-serif text-4xl italic text-white">
+          Alan Sherba
+        </h1>
+        {/* Looping marquee of roles, scrolling left to right */}
+        <div className="min-w-0 flex-1 self-center overflow-hidden">
+          <div className="flex w-max animate-marquee select-none font-mono text-sm tracking-wider text-neutral-500">
+            {[0, 1].map((half) => (
+              <span key={half} className="whitespace-pre">
+                {"Creative Director - Engineer - Designer - Artist - Gaming Enthusiast - ".repeat(6)}
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* Project Hero */}
-        <Panel className="relative aspect-square select-none">
-          {selectedProject.media.length > 0 && (
+        {/* Contact dropdown */}
+        <div className="relative">
+          <button
+            className="font-serif text-3xl italic text-accent hover:underline"
+            onClick={() => setContactOpen(!contactOpen)}
+          >
+            Contact
+          </button>
+          {contactOpen && (
             <>
               <div
-                style={{
-                  width: "351.3px",
-                  height: "351.3px",
-                  minWidth: "351.3px",
-                  minHeight: "351.3px",
-                  maxWidth: "351.3px",
-                  maxHeight: "351.3px",
-                  position: "relative",
-                }}
-                className="mx-auto"
-              >
-                <img
-                  className={
-                    "aspect-square object-cover"
-                  }
-                  src={
-                    process.env.PUBLIC_URL +
-                    "/images/" +
-                    selectedProject.media[0]
-                  }
-                />
+                className="fixed inset-0 z-10"
+                onClick={() => setContactOpen(false)}
+              />
+              <div className="absolute right-0 top-full z-20 flex flex-col items-end gap-2 bg-black py-3 font-mono text-sm">
+                <a
+                  className="select-text text-accent hover:underline"
+                  href="mailto:hello@less3.design"
+                >
+                  hello@less3.design
+                </a>
+                <a
+                  className="text-accent hover:underline"
+                  href="https://twitter.com/AlanSherba"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Twitter
+                </a>
+                <a
+                  className="text-accent hover:underline"
+                  href="https://www.linkedin.com/in/alan-sherba-365784141/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  LinkedIn
+                </a>
               </div>
             </>
           )}
-        </Panel>
+        </div>
+      </header>
+    );
+  };
 
-        {/* Contact card */}
-        <Panel className="flex flex-col gap-1 w-fit self-start">
-          <p className="text-2xl font-light text-left">Contact</p>
-          <a
-            className="select-text text-sm font-light text-right text-[#71BBFF] hover:underline"
-            href="mailto:hello@less3.design"
-          >
-            hello@less3.design
-          </a>
-          <div className="flex flex-row gap-2">
-            <a
-              className="select-text text-sm font-light text-right text-[#71BBFF] hover:underline"
-              href="https://twitter.com/AlanSherba"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Twitter
-            </a>
-            <a
-              className="select-text text-sm font-light text-right text-[#71BBFF] hover:underline"
-              href="https://www.linkedin.com/in/alan-sherba-365784141/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              LinkedIn
-            </a>
+  const List = () =>
+  {
+    return (
+      <nav className="w-[42%] max-w-2xl overflow-y-auto pb-16 pl-5 pr-8">
+        {ProjectCategories.map((category) => (
+          <div key={category} className="flex flex-col">
+            <p className="select-none py-1 font-mono text-neutral-600">
+              {category}
+            </p>
+            {ProjectDatabase.filter((p) => p.category === category).map(
+              (project) => (
+                <ProjectListItem
+                  key={project.title}
+                  title={project.title}
+                  subtitle={project.subtitle}
+                  year={project.year}
+                  selected={project.title === selectedProject.title}
+                  onClick={() => setProject(project.title)}
+                />
+              ),
+            )}
           </div>
-        </Panel>
-      </div>
+        ))}
+      </nav>
     );
   };
 
   const Description = () =>
   {
     return (
-      <Panel
-        className={
-          "flex flex-col gap-4 mx-auto overflow-auto"
-        }
-        style={{
-          maxWidth: "600px",
-          maxHeight: "60vh",
-          alignSelf: "flex-start",
-          minHeight: 0,
-        }}
-        onAnimationEnd={() => setNewProjectAnimation(false)}
-      >
-        <div className="flex flex-col gap-4 p-0 m-0">
-          <span className="relative text-4xl font-light block">
+      <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
+        <div className="flex max-w-3xl flex-col gap-6">
+          <h2 className="font-serif text-5xl text-white">
             {selectedProject.title}
-            <div className="absolute bottom-0 left-[-40px] top-0 m-auto h-[3px] w-4 rounded bg-offwhite"></div>
-          </span>
-          <p className="whitespace-pre-line">{selectedProject.description}</p>
+          </h2>
+          <p className="whitespace-pre-line font-mono leading-relaxed text-white opacity-70">
+            {selectedProject.description}
+          </p>
           {selectedProject.link && selectedProject.linkText && (
             <a
-              className="text-[#71BBFF] hover:underline"
+              className="w-fit font-serif text-xl text-accent underline underline-offset-2"
               target="_blank"
+              rel="noopener noreferrer"
               href={selectedProject.link}
             >
               {selectedProject.linkText}
             </a>
           )}
 
-          <div className="flex flex-col gap-4">
-            {selectedProject.media.slice(1).map((mediaString, index) =>
+          <div className="flex flex-col gap-6 pt-4">
+            {/* Projects with only a hero icon show it; others show their gallery */}
+            {(selectedProject.media.length > 1
+              ? selectedProject.media.slice(1)
+              : selectedProject.media
+            ).map((mediaString) =>
             {
               const lowerMediaString = mediaString.toLowerCase();
-              const isVideo = lowerMediaString.endsWith(".mp4") || lowerMediaString.endsWith(".webm");
-              const mediaUrl = process.env.PUBLIC_URL + "/images/" + mediaString;
+              const isVideo =
+                lowerMediaString.endsWith(".mp4") ||
+                lowerMediaString.endsWith(".webm");
+              const mediaUrl =
+                process.env.PUBLIC_URL + "/images/" + mediaString;
               return isVideo ? (
                 <video
                   key={mediaString}
-                  className="object-fit box-border h-fit w-full"
+                  className="box-border h-fit w-full"
                   src={mediaUrl}
                   autoPlay
                   muted
@@ -236,7 +237,7 @@ function App()
               ) : (
                 <img
                   key={mediaString}
-                  className="object-fit box-border h-fit w-full"
+                  className="box-border h-fit w-full"
                   src={mediaUrl}
                   alt=""
                 />
@@ -244,119 +245,16 @@ function App()
             })}
           </div>
         </div>
-      </Panel>
-    );
-  };
-
-  const List = () =>
-  {
-    return (
-      <Panel
-        className="flex flex-col items-left"
-        style={{ width: "400px", minWidth: "400px", maxWidth: "400px", height: "fit-content" }}
-      >
-        <text className="relative select-none text-4xl font-light">
-          Projects
-        </text>
-        <div className="h-4" />
-
-        {/* Projects list */}
-        {ProjectCategories.map((category) => (
-          <>
-            <text className="relative select-none font-light opacity-30">
-              {category}
-            </text>
-            {ProjectDatabase.map((project) =>
-            {
-              return project.category == category ? (
-                <ProjectListItem
-                  key={project.title + category}
-                  title={project.title}
-                  subtitle={project.subtitle}
-                  year={project.year}
-                  selected={project.title === selectedProject.title}
-                  onClick={() =>
-                  {
-                    setProject(project.title);
-                  }}
-                />
-              ) : (
-                <></>
-              );
-            })}
-            {
-              // Only add divider if there is more in this category
-              ProjectDatabase.filter(p => p.category == category).length > 1 && <div className="h-4" />
-            }
-          </>
-        ))}
-      </Panel>
-    );
-  };
-
-  const BodySection = () =>
-  {
-    return (
-      <div
-        className="flex flex-row gap-8 items-start"
-        style={{
-        }}
-      >
-        {Hero()}
-        {List()}
-        {Description()}
-      </div>
+      </main>
     );
   };
 
   return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-      {/* BG Layer 1 — static dots */}
-      <div
-        className="pointer-events-none absolute h-[400%] w-[400%]"
-        style={{
-          top: "-150%",
-          left: "-150%",
-          backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
-          backgroundRepeat: "repeat",
-          backgroundColor: "black",
-          opacity: .1,
-        }}
-      />
-
-      {/* BG — mouse reveal spotlight */}
-      <div
-        ref={revealRefDots}
-        className="pointer-events-none absolute h-[400%] w-[400%]"
-        style={{
-          top: "-150%",
-          left: "-150%",
-          backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg_dots.png)`,
-          backgroundRepeat: "repeat",
-          backgroundColor: "black",
-          opacity: .1,
-        }}
-      />
-      {/* BG — mouse reveal spotlight */}
-      <div
-        ref={revealRefBg}
-        className="pointer-events-none absolute h-[100%] w-[100%]"
-        style={{
-          backgroundImage: `url(${process.env.PUBLIC_URL}/images/bg.png)`,
-          //backgroundColor: "black",
-          backgroundSize: "cover",           // Fill to fit
-          backgroundPosition: "center",      // Center the image
-          backgroundRepeat: "no-repeat",
-        }}
-      />
-
-      {/* Content layer */}
-      <div
-        className="absolute inset-0 flex flex-row gap-8 justify-center p-16 h-full w-full"
-      >
-        <div className="flex flex-row gap-8 justify-center items-center h-full w-full">
-          {BodySection()}
-        </div>
+    <div className="absolute inset-0 flex flex-col overflow-hidden bg-black font-mono text-white">
+      {Header()}
+      <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-row gap-8 px-16">
+        {List()}
+        {Description()}
       </div>
     </div>
   );
