@@ -1,0 +1,847 @@
+
+
+# SpacetimeDB Core Concepts
+
+SpacetimeDB is a relational database that is also a server. It lets you upload application logic directly into the database as modules, eliminating the traditional web/game server layer entirely. Rust, C#, and C++ modules compile to WebAssembly, while TypeScript modules run on V8.
+
+---
+
+## Critical Rules
+
+1. **Reducers are transactional.** They do not return data to callers. Use subscriptions to read data.
+2. **Reducers must be deterministic.** Do not use filesystem, network, external clocks, or external random sources in reducers. Use the reducer context (`ctx`) for SpacetimeDB-provided timestamp and deterministic random values.
+3. **Read data via tables/subscriptions**, not reducer return values. Clients get data through subscribed queries.
+4. **Auto-increment IDs are not sequential.** Gaps are normal, do not use for ordering. Use timestamps or explicit sequence columns.
+5. **`ctx.sender` is the authenticated principal.** Never trust identity passed as arguments.
+
+---
+
+## Feature Implementation Checklist
+
+1. **Backend:** Define table(s) to store the data
+2. **Backend:** Define reducer(s) to mutate the data
+3. **Client:** Subscribe to the table(s)
+4. **Client:** Call the reducer(s) from UI
+5. **Client:** Render the data from the table(s)
+
+---
+
+## Debugging Checklist
+
+1. Is SpacetimeDB server running? (`spacetime start`)
+2. Is the module published? (`spacetime publish`)
+3. Are client bindings generated? (`spacetime generate`)
+4. Check server logs for errors (`spacetime logs <db-name>`)
+5. Is the reducer actually being called from the client?
+
+---
+
+## Tables
+
+- **Private tables** (default): Only accessible by reducers and the database owner.
+- **Public tables**: Exposed for client read access through subscriptions. Writes still require reducers.
+
+Organize data by access pattern, not by entity:
+
+```
+Player          PlayerState         PlayerStats
+id         <--  player_id           player_id
+name            position_x          total_kills
+                position_y          total_deaths
+                velocity_x          play_time
+```
+
+## Reducers
+
+Reducers are transactional functions that modify database state. They run atomically, cannot interact with the outside world, and do not return data to callers. See the language-specific server skills for syntax.
+
+## Event Tables
+
+Event tables broadcast reducer-specific data to clients. Rows are never stored in the client cache (`count()` returns 0, `iter()` yields nothing); only `onInsert` callbacks fire.
+
+## Subscriptions
+
+Subscriptions replicate database rows to clients in real-time.
+
+1. **Subscribe**: Register SQL queries describing needed data
+2. **Receive initial data**: All matching rows are sent immediately
+3. **Receive updates**: Real-time updates when subscribed rows change
+4. **React to changes**: Use callbacks (`onInsert`, `onDelete`, `onUpdate`)
+
+Best practices:
+- Group subscriptions by lifetime
+- Subscribe before unsubscribing when updating subscriptions
+- Avoid overlapping queries
+- Use indexes for efficient queries
+
+## Modules
+
+Modules contain application logic that runs inside the database.
+
+- **Tables**: Define the data schema
+- **Reducers**: Define callable functions that modify state
+- **Event Tables**: Broadcast reducer-specific data to clients
+- **Views**: Read-only functions that expose computed subsets of data to clients
+- **Procedures**: (Unstable) Functions that can have side effects (HTTP requests, `ctx.withTx`)
+
+Server-side modules can be written in: Rust, C#, TypeScript, C++
+
+Lifecycle: Write → Compile → Publish (`spacetime publish`) → Hot-swap (republish without disconnecting clients)
+
+## Reusable Modules and Configuration
+
+TypeScript and C# support same-language submodule composition. A namespace has a language accessor and a canonical database name; SQL, CLI calls, and HTTP calls use the canonical name. Changing the canonical namespace drops its tables and their data, so pin it when renaming an accessor. TypeScript supports nested submodules; C# composition requires 2.13+ with .NET 10/C# 14, and nested or repeated C# mounts require 2.14+. See the respective server skills for registration and helper-context rules.
+
+Database environment values are read-only strings, including secrets, supplied at publish time, not process environment variables. Keys are exact and case-sensitive: declare every key module code reads; undeclared reads fail even if a value is stored. Required declarations need values before initialization/migration; optional declarations permit absence. Publishing preserves unspecified values; environment-only publishing changes configuration without replacing the module. Transactional reads share a snapshot. In TypeScript/C#, named submodules cannot declare their own environment or read the root environment through host-dispatched entry points; ordinary helper calls retain the caller's access. C# dependencies registered in `public` instead contribute to the root schema. Do not return or log secrets; private storage does not prevent module code from exposing them.
+
+## Views with Arguments and Module Tests
+
+Views can accept arguments in 2.13+ (Rust, TypeScript, C#), queried as `SELECT * FROM view_name(42)`. Use explicit queries instead of subscribe-all on that connection; subscribe-all skips these views. See server skills for definition restrictions and client skills for query/cache rules.
+
+Rust and TypeScript provide in-memory module unit-test harnesses in 2.12+: run native `cargo test` or Vitest with the module-test plugin. These use the real datastore but do not simulate clients, subscriptions, RLS enforcement, lifecycle events, or timer execution. Test those host behaviors against a running database.
+
+## Inter-Database Communication
+
+Reducers can't make network requests, but a reducer can call a reducer in another database on the same server through an **outbox table** (async IDC). The reducer inserts a row, and after its transaction commits, the row is delivered as a reducer call to the target database exactly once, in order with other calls through the same outbox to the same database. The sending reducer doesn't wait, and the two databases don't commit together: the receiving reducer runs later in its own transaction and can fail. An optional `on_result` reducer in the sending database receives the result, so it can undo or record the work.
+
+Use it to split an application into databases that scale and deploy independently, such as a lobby that sends players to separate game world databases. Only Rust and TypeScript modules can declare outbox tables. See the language-specific server skills for syntax.
+
+## Identity
+
+- **Identity**: A long-lived, globally unique identifier for a user.
+- **ConnectionId**: Identifies a specific client connection.
+- Always use `ctx.sender` / `ctx.Sender` / `ctx.sender()` for authorization.
+
+SpacetimeDB works with many OIDC providers, including SpacetimeAuth (built-in), Auth0, Clerk, Keycloak, Google, and GitHub.
+
+
+
+
+# SpacetimeDB CLI
+
+Use this skill when the user needs help with the `spacetime` CLI tool - initializing projects, building modules, publishing databases, querying data, managing servers, or troubleshooting CLI issues.
+
+## Quick Reference
+
+### Project Initialization & Development
+
+```bash
+# Initialize new project
+spacetime init my-project --lang rust|csharp|typescript|cpp
+spacetime init my-project --template <template-id>
+
+# Build module
+spacetime build                    # release build
+spacetime build --debug            # faster iteration, slower runtime
+
+# Dev mode (auto-rebuild, auto-publish, generates bindings)
+spacetime dev
+spacetime dev --client-lang typescript --module-bindings-path ./client/src/module_bindings
+
+# Generate client bindings
+spacetime generate --lang typescript|csharp|rust --out-dir ./bindings --module-path ./server
+spacetime generate --lang unrealcpp --uproject-dir ./MyGame --module-path ./server --unreal-module-name MyGame
+```
+
+### Client and Module Bindings
+
+`spacetime generate --bindings client` (default) generates bindings for clients connecting to a database. `--bindings module` generates receiver bindings used inside a **sending database module** to call reducers in another **receiving database** through asynchronous IDC. Rust and TypeScript module bindings are supported; C#/C++ module bindings are not implemented yet. `unrealcpp` is client-only; `cpp` is accepted only in module mode.
+
+In `spacetime.json`, each sending database's non-inherited `dependencies` array requires its own `module-path` and dependency `name` plus receiving-module `module-path` or `database`. A `database` reference resolves another target's local source/build settings in the same config; it does not fetch a running database's schema. A direct receiving module source takes precedence. Dependencies do not themselves publish receiving databases or inherit the sending module's build settings. `generate <sending-database>` processes both its regular `generate` entries (client bindings by default) and `dependencies` (module bindings automatically); no `--bindings` flag or second `generate` entry is needed for a dependency. For dependencies, module binding language defaults to the sending module's language and Rust/TypeScript output defaults to `<sending module-path>/src/remote_bindings`. Explicit config `out-dir` is config-relative. A regular `generate` entry can select `"bindings": "module"`, but does not use dependency language or output defaults. The CLI `--bindings` override is allowed only when a single generation entry is selected.
+
+`dev` generates only root dependencies before building the sending module, and watches their source paths. Child targets are available for source lookup, not recursive dependency generation. `--skip-generate` skips receiver/client generation and receiver-only watching; `--skip-publish` does not. See https://spacetimedb.com/docs/cli-reference/spacetime-json#receiver-dependencies for examples.
+
+### C# Build Modes
+
+For new .NET 10 modules, `dotnet build` produces a managed library.
+`spacetime build` and `spacetime publish` explicitly select `wasi-wasm` and use
+NativeAOT-LLVM; `--native-aot` is not required. The manual WASM equivalent is
+`dotnet publish -c Release -r wasi-wasm` from the module directory.
+Use `spacetime init --lang csharp --dotnet-version 10 my-project` to select
+.NET 10 explicitly.
+
+Do not make the project permanently WASM-only to fix a managed build: keep LLVM
+package references and WASM settings conditional on the RID. Let dotnet restore
+when changing build modes. Managed builds alone do not enable C# module unit tests.
+
+.NET 8 retains WASM/JIT by default and requires `--native-aot` to select NativeAOT
+where supported. The CLI manages `SPACETIMEDB_WASM_AOT` and its legacy alias
+`EXPERIMENTAL_WASM_AOT`; users do not need to set either for .NET 10.
+
+### Publishing & Deployment
+
+```bash
+# Publish to Maincloud (default)
+spacetime publish my-database --yes
+
+# Publish to local server
+spacetime publish my-database --server local --yes
+
+# Clear database and republish
+spacetime publish my-database --delete-data=always --yes
+```
+
+### Database Environment
+
+Module declarations validate string values before initialization/migration. Publishing preserves unspecified stored values. For each declared key, precedence is publishing-process environment → resolved config `env` map → stored database value. Undeclared keys can be staged explicitly in JSON, but module code cannot read them until declared. Keep secrets out of checked-in config; use process variables or ignored local config files.
+
+```bash
+# Supply declared values while publishing; use a disposable value for local development
+API_KEY='development-only' spacetime publish my-database --server local --yes
+
+# Change only the environment of an existing database (no module build/upload)
+API_KEY='development-only' spacetime publish my-database --server local --env-only --yes
+
+# Explicitly remove an optional or undeclared key
+spacetime publish my-database --server local --env-only --unset-env LOG_LEVEL --yes
+
+# Inspect stored values (these commands print secrets; authorization is required)
+spacetime env list my-database --server local
+spacetime env get my-database MODE --server local
+```
+
+Before `--unset-env`, remove that key from effective JSON/process inputs. Required values cannot be unset. `--replace-env` replaces the whole store and deletes omitted keys; it cannot be combined with `--unset-env`. `--delete-data` also clears environment values; supply required values again after a reset. `--env-only` requires an existing database and cannot be combined with a reset. An empty string is a value, not deletion. `--env` selects a project configuration environment; it does not assign a database environment variable.
+
+There is no separate `spacetime env set`: updates use validated publishing. For full merge/validation semantics see https://spacetimedb.com/docs/databases/environment-variables.
+
+### Database Interaction
+
+```bash
+# SQL queries
+spacetime sql my-database "SELECT * FROM users"
+spacetime sql my-database --interactive   # REPL mode
+
+# Call reducers (each argument is a separate positional arg)
+spacetime call my-database my_reducer '"value"' '123'
+
+# Subscribe to changes
+spacetime subscribe my-database "SELECT * FROM users" --num-updates 10
+
+# View logs
+spacetime logs my-database -f              # follow logs
+spacetime logs my-database -n 100          # up to 100 log lines
+
+# Describe schema
+# (without --json, output is human-readable text)
+spacetime describe my-database --json
+spacetime describe my-database tables --json   # also views, reducers, procedures, routes, env, types
+spacetime describe my-database tables users --json
+spacetime describe my-database reducers my_reducer --json
+```
+
+### Database Management
+
+```bash
+# List databases
+spacetime list
+
+# Delete database
+spacetime delete my-database
+
+# Rename database
+spacetime rename <database-identity> --to new-name
+```
+
+### Server Management
+
+```bash
+# List configured servers
+spacetime server list
+
+# Add server
+spacetime server add local --url http://localhost:3000 --default
+spacetime server add myserver --url https://my-spacetime.example.com
+
+# Set default server
+spacetime server set-default local
+
+# Test connectivity
+spacetime server ping local
+
+# Start local instance
+spacetime start
+
+# Clear local data
+spacetime server clear
+```
+
+### Authentication
+
+```bash
+# Login (opens browser)
+spacetime login
+
+# Login with token
+spacetime login --token <token>
+
+# Show login status
+spacetime login show
+
+# Logout
+spacetime logout
+```
+
+### SpacetimeAuth Management (2.13+)
+
+`spacetime auth` manages SpacetimeAuth settings; it is not a replacement for `spacetime login`. Log in and enable SpacetimeAuth for the database first. Pass the database **name**, not its identity. For example:
+
+```bash
+spacetime auth config set my-database display_name 'My App'
+spacetime auth idp enable my-database github
+spacetime auth client create my-database --name web
+spacetime auth client set my-database --name web web true
+spacetime auth client get my-database --name web
+spacetime auth client set my-database --name web redirect_uris 'https://example.com/callback'
+```
+
+The command families are `config set/reset`, `idp set/enable/disable`, and `client create/delete/get/set`. `idp set <database> <idp> <client_id>` prompts for the OAuth secret when omitted (or reads it from stdin); avoid embedding real secrets in shell history. `client get --include-secret` explicitly prints a client's secret; ordinary create/get output does not. These commands use the SpacetimeAuth management service, not the database `--server` target. Use each subcommand's `--help` for supported providers, settings, and values.
+
+## Default Servers
+
+| Name | URL | Description |
+|------|-----|-------------|
+| `maincloud` | `https://maincloud.spacetimedb.com` | Production cloud (default) |
+| `local` | `http://127.0.0.1:3000` | Local development server |
+
+## Common Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--server` | `-s` | Target server (nickname, hostname, or URL) |
+| `--yes` | `-y` | Non-interactive mode (skip confirmations) |
+| `--anonymous` | | Use anonymous identity |
+| `--module-path` | `-p` | Path to module project |
+| `--no-config` | | Ignore `spacetime.json` project configuration |
+
+## Troubleshooting
+
+### "Not logged in"
+```bash
+spacetime login
+# Or use --anonymous for public operations
+```
+
+### "Server not responding"
+```bash
+spacetime server ping <server>
+# For local: ensure spacetime start is running
+```
+
+### "Schema conflict"
+```bash
+# Clear data and republish
+spacetime publish my-db --delete-data=always --yes
+```
+
+### "Build failed"
+```bash
+# Check Rust/C# toolchain
+rustup show
+# For Rust modules, ensure wasm32-unknown-unknown target
+rustup target add wasm32-unknown-unknown
+```
+
+## Module Languages
+
+**Server-side (modules):** Rust, C#, TypeScript, C++
+**Client SDKs:** TypeScript, C#, Rust, Unreal Engine
+**CLI `generate` targets:** TypeScript, C#, Rust, Unreal C++
+
+
+
+
+# SpacetimeDB Rust SDK Reference
+
+## Imports
+
+```rust
+use spacetimedb::{
+    procedure, reducer, table, Filter, Identity, ProcedureContext, Query,
+    ReducerContext, SpacetimeType, Table, ConnectionId, ScheduleAt,
+    TimeDuration, Timestamp, Uuid,
+};
+```
+
+**`Table` is required.** Without it, `ctx.db.*.insert()`, `.iter()`, `.find()` etc. won't compile (`no method named 'insert' found`).
+
+## Tables
+
+`#[spacetimedb::table(...)]` on a `pub struct`. `accessor` must be snake_case:
+
+```rust
+#[spacetimedb::table(accessor = entity, public)]
+pub struct Entity {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub owner: Identity,
+    pub name: String,
+    #[index(btree)]
+    pub active: bool,
+}
+```
+
+Options: `accessor = snake_case` (required), `public`, `scheduled(reducer_fn)`, `index(...)`
+
+`ctx.db` accessors use the `accessor` name (snake_case).
+
+## Column Types
+
+| Rust type | Notes |
+|-----------|-------|
+| `u8` / `u16` / `u32` / `u64` / `u128` | unsigned integers |
+| `i8` / `i16` / `i32` / `i64` / `i128` | signed integers |
+| `spacetimedb::sats::u256` / `spacetimedb::sats::i256` | 256-bit integers |
+| `f32` / `f64` | floats |
+| `bool` | boolean |
+| `String` | text |
+| `Vec<T>` | list/array |
+| `Identity` | user identity |
+| `ConnectionId` | connection handle |
+| `Timestamp` | server timestamp (microseconds since epoch) |
+| `TimeDuration` | duration in microseconds |
+| `Uuid` | UUID |
+| `Option<T>` | nullable column |
+
+## Column Attributes
+
+```rust
+#[primary_key]          // primary key
+#[auto_inc]             // auto-increment (use 0 as placeholder on insert)
+#[unique]               // unique constraint
+#[index(btree)]         // btree index (enables .filter() on this column)
+#[default(true)]        // migration-safe default for a newly appended column
+```
+
+Defaults support compatible addition of a newly appended field. Do not place `#[default(...)]` on primary-key, unique, or auto-increment columns.
+
+## Indexes
+
+Prefer `#[index(btree)]` inline for single-column. Multi-column uses table-level:
+
+```rust
+// Inline (preferred for single-column):
+#[index(btree)]
+pub author_id: u64,
+// Access: ctx.db.post().author_id().filter(author_id)
+
+// Multi-column (table-level):
+#[spacetimedb::table(accessor = membership, public,
+    index(accessor = by_group_user, btree(columns = [group_id, user_id]))
+)]
+pub struct Membership { pub group_id: u64, pub user_id: Identity, ... }
+// Access: ctx.db.membership().by_group_user().filter((group_id, &user_id))
+```
+
+When you frequently look up rows by multiple columns, prefer a multi-column index over filtering by one column and looping over the results.
+
+## Reducers
+
+```rust
+#[spacetimedb::reducer]
+pub fn create_entity(ctx: &ReducerContext, name: String) {
+    ctx.db.entity().insert(Entity { id: 0, owner: ctx.sender(), name, active: true });
+}
+
+// Reducers can return Result<(), String> or Result<(), E> where E: Display
+#[spacetimedb::reducer]
+pub fn validate_entity(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("Name cannot be empty".to_string());
+    }
+    ctx.db.entity().try_insert(Entity { id: 0, owner: ctx.sender(), name, active: true })?;
+    Ok(())
+}
+```
+
+Note: `insert()` panics on constraint violations. Use `try_insert()` with `?` when returning `Result`.
+
+## DB Operations
+
+```rust
+ctx.db.entity().insert(Entity { id: 0, name: "Sample".into() });  // Insert (0 for autoInc)
+ctx.db.entity().id().find(entity_id);                              // Find by PK → Option<Entity>
+ctx.db.entity().identity().find(ctx.sender());                     // Find by unique column → Option<Entity>
+ctx.db.item().author_id().filter(author_id);                       // Filter by index → iterator
+ctx.db.entity().iter();                                            // All rows → iterator
+ctx.db.entity().count();                                           // Count rows
+ctx.db.entity().id().update(Entity { name: new_name, ..existing }); // Update (override + spread)
+ctx.db.entity().id().delete(entity_id);                            // Delete by PK
+ctx.db.entity().name().delete("Alice".to_string());                // Delete by indexed String column
+```
+
+Note: `iter()` and `filter()` return iterators. Collect to Vec if you need `.sort()`, `.filter()`, `.map()`.
+
+Range queries on btree indexes: `filter(18..=65)`, `filter(18..)`, `filter(..18)`.
+
+String column accessors operate on the column's owned `String` type, not `&str`. Pass a `String` or `&String` to `find` and `delete`; index filters borrow the key, as in `ctx.db.product().category().filter(&"hardware".to_string())`.
+
+## Lifecycle Hooks
+
+```rust
+#[spacetimedb::reducer(init)]
+pub fn init(ctx: &ReducerContext) { ... }
+
+#[spacetimedb::reducer(client_connected)]
+pub fn on_connect(ctx: &ReducerContext) { ... }
+
+#[spacetimedb::reducer(client_disconnected)]
+pub fn on_disconnect(ctx: &ReducerContext) { ... }
+```
+
+The current connection ID is available through `ctx.connection_id()` (not a public field) and may be absent outside connection-scoped calls.
+
+## Views
+
+```rust
+// Anonymous view (same result for all clients):
+use spacetimedb::{view, AnonymousViewContext};
+
+#[view(accessor = active_users, public)]
+fn active_users(ctx: &AnonymousViewContext) -> Vec<Entity> {
+    ctx.db.entity().active().filter(true).collect()
+}
+
+// Per-user view (result varies by sender):
+use spacetimedb::{view, ViewContext};
+
+#[view(accessor = my_profile, public)]
+fn my_profile(ctx: &ViewContext) -> Option<Entity> {
+    ctx.db.entity().identity().find(ctx.sender())
+}
+```
+
+Procedural-view table handles support indexed `find` and `filter` access, but not full-table `iter()`. Start a procedural view from an appropriate table index.
+
+Declare a procedural view primary key in the view attribute:
+
+```rust
+#[view(accessor = catalog_entry, public, primary_key = sku)]
+fn catalog_entry(ctx: &AnonymousViewContext) -> Vec<CatalogEntry> { ... }
+```
+
+Procedural-view primary keys are explicit schema metadata. Add one only when the view itself is required to expose a primary key; a source table's primary key is not inherited by the view.
+
+Query-builder views use `ViewContext`, `ctx.from`, and return `impl Query<Row>`. Use `filter` for predicates and `right_semijoin` when the result should contain right-side rows that have a matching left-side row:
+
+```rust
+ctx.from.article().filter(|article| article.published.eq(true))
+ctx.from.subscription().right_semijoin(
+    ctx.from.account(),
+    |subscription, account| subscription.account_id.eq(account.id),
+)
+```
+
+Query-builder comparisons against a `String` column take an owned `String`, for example `row.label.eq("active".to_string())`.
+
+Views can also accept arguments (2.13+), after the context:
+
+```rust
+#[spacetimedb::view(accessor = entity_by_id, public)]
+pub fn entity_by_id(ctx: &spacetimedb::AnonymousViewContext, id: u64) -> Option<Entity> {
+    ctx.db.entity().id().find(id)
+}
+```
+
+Floating-point arguments and primary keys are rejected on argument-bearing views. See client skills for SQL subscription syntax and restrictions.
+
+## Client Visibility Filters
+
+```rust
+use spacetimedb::Filter;
+
+#[spacetimedb::client_visibility_filter]
+const PRIVATE_NOTE_FILTER: Filter =
+    Filter::Sql("SELECT * FROM owned_row WHERE owner = :sender");
+```
+
+## Reducer Context API
+
+`ReducerContext` (`ctx`) is the only source of sender identity, time, and randomness; stdlib clocks and RNG are unavailable in modules.
+
+```rust
+// Auth: ctx.sender() is the caller's Identity
+if row.owner != ctx.sender() {
+    panic!("unauthorized");
+    // or: return Err(anyhow::anyhow!("unauthorized"));
+}
+
+// Server timestamp (deterministic per reducer call)
+ctx.db.item().insert(Item { id: 0, owner: ctx.sender(), created_at: ctx.timestamp, .. });
+
+// Timestamp arithmetic
+let expiry = ctx.timestamp + TimeDuration::from_micros(delay_micros);
+
+// Deterministic RNG: ctx.random() for a single value, ctx.rng() for the rand::Rng trait
+use spacetimedb::rand::Rng;
+let n: u32 = ctx.random();                    // random u32
+let roll: u32 = ctx.rng().gen_range(1..=6);   // any rand::Rng method
+
+// Client: Timestamp → milliseconds since epoch
+timestamp.to_micros_since_unix_epoch() / 1000
+```
+
+## Environment Variables
+
+```rust
+#[spacetimedb::env]
+pub struct Env {
+    pub API_KEY: String,
+    pub LOG_LEVEL: Option<String>,
+}
+// Inside a root entry point:
+// ctx.env.API_KEY() -> String
+// ctx.env.LOG_LEVEL() -> Option<String>
+// ctx.env.get("LOG_LEVEL") -> Option<String>
+```
+
+For constrained values, derive `spacetimedb::EnvironmentValue` on a payload-free enum and use it as a field type (or `Option<Enum>`). `#[env(value = "production")]` on a variant supplies its exact accepted string; without it, the Rust variant name is used. `#[env(values("info", "debug"))]` also constrains `String`/`Option<String>` fields.
+
+See the concepts skill for shared environment and secret-handling rules.
+
+## Scheduled Tables
+
+```rust
+#[spacetimedb::table(accessor = tick_timer, scheduled(tick), public)]
+pub struct TickTimer {
+    #[primary_key]
+    #[auto_inc]
+    scheduled_id: u64,
+    scheduled_at: spacetimedb::ScheduleAt,
+}
+
+#[spacetimedb::reducer]
+pub fn tick(ctx: &ReducerContext, timer: TickTimer) {
+    // timer row is auto-deleted after this reducer runs
+}
+
+// One-time: fires once at a specific time
+let at = ScheduleAt::Time(ctx.timestamp + std::time::Duration::from_secs(10));
+// Repeating: fires on an interval
+let at = ScheduleAt::Interval(std::time::Duration::from_secs(5).into());
+
+ctx.db.tick_timer().insert(TickTimer { scheduled_id: 0, scheduled_at: at });
+```
+
+Construct a connection ID from a numeric representation with `ConnectionId::from_u128(value)`.
+
+## Inter-Database Calls (Async IDC)
+
+A reducer calls a reducer in another database by inserting a row into an outbox table. The call is sent only if the transaction commits, runs exactly once, and runs in order with other calls through the same outbox to the same database. The sending reducer doesn't wait for it. Both databases must be on the same server.
+
+Generate receiver bindings by listing the receiving module under `dependencies` in the sending database's `spacetime.json`, then running `spacetime generate <sending-database>`. Rust bindings are written to `src/remote_bindings/`.
+
+```json
+{
+  "database": "lobby",
+  "module-path": "./lobby",
+  "dependencies": [{ "name": "game_world", "database": "game-world" }],
+  "children": [{ "database": "game-world", "module-path": "./game_world" }]
+}
+```
+
+```rust
+mod remote_bindings;
+use remote_bindings::game_world;
+
+// Each row is one call to game_world's `admit_player(name: String)` reducer.
+#[spacetimedb::table(accessor = admit_player_outbox, outbox(game_world::admit_player))]
+pub struct AdmitPlayerOutbox {
+    #[primary_key]
+    #[auto_inc]
+    msg_id: u64,                 // exactly one u64 auto_inc primary key
+    #[target]
+    world: game_world::Identity, // exactly one target, typed by the bindings
+    name: String,                // one column per reducer parameter, same name and type
+    // #[param(name = name)] player_name: String,  // alias a column to a parameter
+    // Extra columns are allowed. They aren't sent, but on_result can read them.
+}
+
+#[spacetimedb::reducer]
+pub fn send_to_world(ctx: &ReducerContext, name: String, world: game_world::Identity) {
+    // Sent if and only if this transaction commits.
+    ctx.db.admit_player_outbox().insert(AdmitPlayerOutbox { msg_id: 0, world, name });
+}
+
+// Optional, at most one per outbox. Private. Runs once per row, then the row is deleted.
+#[spacetimedb::reducer(on_result(admit_player_outbox))]
+pub fn on_admit_player_result(ctx: &ReducerContext, row: AdmitPlayerOutbox, result: Result<(), String>) {
+    if let Err(error) = result {
+        log::warn!("{} was not admitted: {error}", row.name);
+    }
+}
+```
+
+- The receiving reducer is an ordinary reducer and needs no changes. In it, `ctx.sender()` is the sending database's identity, so authorize calls by checking it against an allow-list table.
+- The receiving database runs `client_connected` and `client_disconnected` around every delivered call, with no JWT. If `client_connected` rejects the sending database, the call is retried forever.
+- Outbox rows are insert-only, so a pending call can't be cancelled. A call is never retried once it has a result. To try again, insert a new row, for example from `on_result`.
+- Wrap a plain `Identity` to get a target: `game_world::Identity(identity)`.
+- Index lookups (`find`, `filter`) on a `game_world::Identity` column don't compile. Iterate and compare instead.
+- An outbox table can't also be a scheduled table or an event table.
+- After the receiving reducer's parameters change, regenerate the bindings and republish the sending database. Calls built from old bindings fail with a signature mismatch error.
+
+See https://spacetimedb.com/docs/databases/inter-database-communication for details.
+
+## Procedures and HTTP
+
+Procedures use `&mut ProcedureContext` and may return typed values:
+
+```rust
+use spacetimedb::{procedure, ProcedureContext, SpacetimeType};
+
+#[derive(SpacetimeType)]
+pub struct ResultValue { pub value: String }
+
+#[procedure]
+pub fn inspect(_ctx: &mut ProcedureContext, input: String) -> ResultValue {
+    ResultValue { value: input }
+}
+```
+
+Outbound HTTP is available through `ctx.http`. Convenience methods such as `get` return a response, and other methods use `Request::builder()` with `ctx.http.send(request)`. `response.status()` returns a `StatusCode`; use `is_success()` to test it or `as_u16()` when a numeric status is needed. Responses are not cloneable, so inspect status and headers before consuming the body with `response.into_body().into_string_lossy()`. Header values use the fallible `to_str()` conversion; they do not provide `as_str()`.
+
+Open short database transactions with `ctx.with_tx(|tx| ...)`. Access tables inside the callback through `tx.db`, not directly on `tx`. It returns the callback's value directly, so do not call `unwrap` or `expect` on the result unless the callback itself returns a `Result`. The callback implements `Fn`, so clone captured owned values when storing them rather than moving them out of the closure. Perform network I/O before opening the transaction.
+
+For an outbound request without a convenience method:
+
+```rust
+let request = Request::builder()
+    .method("POST")
+    .uri(url)
+    .body(Body::from_bytes(data))
+    .unwrap();
+let response = ctx.http.send(request).expect("request failed");
+```
+
+Scheduled procedures use the ordinary scheduled-table shape, but the scheduled function is marked `#[procedure]` and receives `&mut ProcedureContext` plus the scheduled row.
+
+Inbound HTTP uses handler functions and one router:
+
+```rust
+use spacetimedb::http::{handler, router, Body, HandlerContext, Request, Response, Router};
+
+#[handler]
+fn health(_ctx: &mut HandlerContext, _request: Request) -> Response {
+    Response::builder().status(200).body(Body::from_bytes("ok")).unwrap()
+}
+
+#[router]
+fn routes() -> Router { Router::new().get("/health", health) }
+```
+
+`HandlerContext` does not expose `db`; open database access with `ctx.with_tx(|tx| ...)`. HTTP response bodies must own their data or borrow `'static` data, so convert dynamic borrowed text to an owned `String` before passing it to `Body::from_bytes`.
+
+## Logging
+
+```rust
+log::info!("Player connected: {:?}", ctx.sender());
+log::warn!("Low health: {}", hp);
+log::error!("Failed to find entity");
+```
+
+## Custom Types
+
+```rust
+#[derive(SpacetimeType)]
+pub enum Status { Online, Away, Offline }
+
+#[derive(SpacetimeType)]
+pub struct Point { x: f32, y: f32 }
+```
+
+## Complete Example
+
+```rust
+// src/lib.rs
+use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, Timestamp};
+
+#[spacetimedb::table(accessor = entity, public)]
+pub struct Entity {
+    #[primary_key]
+    pub identity: Identity,
+    pub name: String,
+    pub active: bool,
+}
+
+#[spacetimedb::table(accessor = record, public)]
+pub struct Record {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub owner: Identity,
+    pub value: u32,
+    pub created_at: Timestamp,
+}
+
+#[spacetimedb::reducer(client_connected)]
+pub fn on_connect(ctx: &ReducerContext) {
+    if let Some(existing) = ctx.db.entity().identity().find(ctx.sender()) {
+        ctx.db.entity().identity().update(Entity { active: true, ..existing });
+    }
+}
+
+#[spacetimedb::reducer(client_disconnected)]
+pub fn on_disconnect(ctx: &ReducerContext) {
+    if let Some(existing) = ctx.db.entity().identity().find(ctx.sender()) {
+        ctx.db.entity().identity().update(Entity { active: false, ..existing });
+    }
+}
+
+#[spacetimedb::reducer]
+pub fn create_entity(ctx: &ReducerContext, name: String) {
+    if ctx.db.entity().identity().find(ctx.sender()).is_some() {
+        panic!("already exists");
+    }
+    ctx.db.entity().insert(Entity { identity: ctx.sender(), name, active: true });
+}
+
+#[spacetimedb::reducer]
+pub fn add_record(ctx: &ReducerContext, value: u32) {
+    if ctx.db.entity().identity().find(ctx.sender()).is_none() {
+        panic!("not found");
+    }
+    ctx.db.record().insert(Record {
+        id: 0,
+        owner: ctx.sender(),
+        value,
+        created_at: ctx.timestamp,
+    });
+}
+```
+
+## Module Unit Tests
+
+The native in-memory harness is available in 2.12+. Keep the same `spacetimedb` version in normal and dev dependencies, enabling `test-utils` only for tests:
+
+```toml
+[dependencies]
+spacetimedb = { version = "2.13.0", features = ["unstable"] }
+
+[dev-dependencies]
+spacetimedb = { version = "2.13.0", features = ["test-utils"] }
+icu_calendar = ">=2.1, <2.2" # temporal_rs requires icu_calendar 2.1.x
+```
+
+Run `cargo test` natively, not with a WebAssembly target. For the `create_entity` reducer above:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spacetimedb::test_utils::{TestAuth, TestContext};
+
+    #[test]
+    fn inserts_entity() {
+        let test = TestContext::new().expect("test database");
+        test.with_reducer_tx(TestAuth::internal(), |ctx| {
+            create_entity(ctx, "Alice".to_owned());
+            Ok::<(), String>(())
+        }).expect("transaction");
+        assert_eq!(test.db.entity().count(), 1);
+    }
+}
+```
+
+`with_reducer_tx` commits on `Ok` and rolls back on `Err` or panic unwinding; propagate reducer errors with `?` when the reducer returns `Result`. Create a new `TestContext` for each test: cloning shares the database. Use `TestAuth::from_jwt_payload(payload, connection_id)?` for client calls and `TestAuth::internal()` for the database itself. The harness exposes `clock`, `rng`, procedure/view contexts, and query execution. It does not simulate subscriptions, RLS, lifecycle calls, or timers. Invoke lifecycle/scheduled reducers explicitly and retain integration tests for host behavior.
+
+See https://spacetimedb.com/docs/how-to/unit-testing for test setup, HTTP mocking, and current limitations.

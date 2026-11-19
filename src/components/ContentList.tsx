@@ -16,6 +16,8 @@ interface ContentListProps {
   entries: readonly ListEntry[];
   selectedKey?: string;
   onSelect: (key: string) => void;
+  // Other people reading each entry's page
+  readers?: (key: string) => number;
   emptyText?: string;
 }
 
@@ -24,9 +26,12 @@ const ContentList = ({
   entries,
   selectedKey,
   onSelect,
+  readers,
   emptyText,
 }: ContentListProps) => (
-  <nav className="min-h-0 flex-1 overflow-y-auto pb-16 pl-5 pr-8">
+  // The extra left padding (offset by the negative margin) leaves room for
+  // the reader counts beside each title
+  <nav className="-ml-5 min-h-0 flex-1 overflow-y-auto pb-16 pl-10 pr-8">
     {entries.length === 0 && emptyText && (
       <p className="select-none py-1 font-mono text-neutral-600">
         {emptyText}
@@ -50,6 +55,7 @@ const ContentList = ({
               title={entry.title}
               year={entry.year}
               selected={entry.key === selectedKey}
+              readers={readers?.(entry.key) ?? 0}
               onClick={() => onSelect(entry.key)}
             />
           ))}

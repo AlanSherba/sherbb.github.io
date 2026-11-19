@@ -15,6 +15,7 @@ jest.mock('./BlogPosts', () => ({
 }));
 jest.mock('./components/BlogPostView', () => () => null);
 jest.mock('./components/Markdown', () => () => null);
+jest.mock('./components/MultiplayerStatus', () => () => null);
 
 test('renders header name', () => {
   render(

@@ -1,9 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BlogPost, blogCategories, loadBlogPosts } from "./BlogPosts";
 import BlogPostView from "./components/BlogPostView";
 import ContentList, { ListEntry } from "./components/ContentList";
 import Markdown from "./components/Markdown";
 import ModeTabs, { SiteMode } from "./components/ModeTabs";
+import PageTitle from "./components/PageTitle";
 import
 {
   isVideoPath,
@@ -11,8 +19,19 @@ import
   resolveMediaUrl,
 } from "./MarkdownFiles";
 import { ProjectData, loadProjects, projectCategories } from "./Projects";
+import
+{
+  otherReaders,
+  pageLocation,
+  setLocation,
+  useMultiplayer,
+} from "./multiplayer/store";
 
 import { useSearchParams } from "react-router-dom";
+
+// Loaded separately so the SpacetimeDB client stays out of the main bundle
+// (and off mobile, which never renders App).
+const MultiplayerStatus = lazy(() => import("./components/MultiplayerStatus"));
 
 const prefetchedImages: HTMLImageElement[] = [];
 
@@ -129,6 +148,21 @@ function App()
       lastPostSlug.current = selectedPost.slug;
     }
   }, [mode, selectedProject, selectedPost]);
+
+  // Tell the multiplayer server which page this tab is reading
+  const location =
+    mode === "projects"
+      ? selectedProject
+        ? pageLocation("projects", selectedProject.title)
+        : ""
+      : selectedPost
+        ? pageLocation("blog", selectedPost.slug)
+        : "";
+  useEffect(() => setLocation(location), [location]);
+
+  const multiplayer = useMultiplayer();
+  const readersOf = (key: string) =>
+    otherReaders(multiplayer, pageLocation(mode, key));
 
   const [contactOpen, setContactOpen] = useState(false);
   const descriptionRef = useRef<HTMLElement>(null);
@@ -247,6 +281,7 @@ function App()
             entries={projectEntries}
             selectedKey={selectedProject?.title}
             onSelect={setProject}
+            readers={readersOf}
           />
         ) : (
           <ContentList
@@ -254,6 +289,7 @@ function App()
             entries={postEntries}
             selectedKey={selectedPost?.slug}
             onSelect={setPost}
+            readers={readersOf}
             emptyText={posts ? "No posts yet" : undefined}
           />
         )}
@@ -266,7 +302,10 @@ function App()
     return (
       <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
         {selectedPost ? (
-          <BlogPostView post={selectedPost} />
+          <BlogPostView
+            post={selectedPost}
+            others={otherReaders(multiplayer, location)}
+          />
         ) : (
           posts && (
             <div className="flex max-w-3xl flex-col gap-6">
@@ -292,9 +331,10 @@ function App()
     return (
       <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
         <div className="flex max-w-3xl flex-col gap-6">
-          <h2 className="font-serif text-[3.5rem] leading-none text-white">
-            {selectedProject.title}
-          </h2>
+          <PageTitle
+            title={selectedProject.title}
+            others={otherReaders(multiplayer, location)}
+          />
           <Markdown>{selectedProject.body}</Markdown>
         </div>
       </main>
@@ -311,6 +351,9 @@ function App()
         {Sidebar()}
         {mode === "projects" ? Description() : Blog()}
       </div>
+      <Suspense fallback={null}>
+        <MultiplayerStatus />
+      </Suspense>
     </div>
   );
 }

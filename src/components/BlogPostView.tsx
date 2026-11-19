@@ -1,12 +1,16 @@
 import { BlogPost, formatPostDate } from "../BlogPosts";
 import Markdown from "./Markdown";
+import PageTitle from "./PageTitle";
 
-const BlogPostView = ({ post }: { post: BlogPost }) => (
+interface BlogPostViewProps {
+  post: BlogPost;
+  others?: number; // other people reading this post
+}
+
+const BlogPostView = ({ post, others }: BlogPostViewProps) => (
   <article className="flex max-w-3xl flex-col gap-6">
     <header className="flex flex-col gap-4">
-      <h2 className="font-serif text-[3.5rem] leading-none text-white">
-        {post.title}
-      </h2>
+      <PageTitle title={post.title} others={others} />
       {post.date && (
         <p className="font-mono text-sm text-neutral-600">
           {formatPostDate(post.date)}
