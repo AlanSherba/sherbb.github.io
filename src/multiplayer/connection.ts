@@ -1,11 +1,14 @@
 import { DbConnection, SubscriptionHandle } from "../module_bindings";
-import { Cursor as CursorRow } from "../module_bindings/types";
+import { Chat as ChatRow, Cursor as CursorRow } from "../module_bindings/types";
 import {
   CURSOR_UPDATES_PER_SECOND,
   clearCursors,
+  removeChat,
   removeCursor,
+  updateChat,
   updateCursor,
 } from "./cursors";
+import { closeChat, startLocalChat } from "./localChat";
 import { CursorTransform, PANEL_HIDDEN, transformAt } from "./panels";
 import {
   getMultiplayerState,
@@ -100,14 +103,14 @@ const pageId = (location: string): number =>
   return hash >>> 0;
 };
 
-// ---- Receiving cursors ----
+// ---- Receiving cursors and chat ----
 
-// The page whose cursors are subscribed, and the subscription
+// The page whose cursors and chats are subscribed, and the subscription
 let cursorPage: number | null = null;
 let cursorSubscription: SubscriptionHandle | null = null;
 
-// Subscribe to the cursors on this tab's page, replacing the previous page's
-// subscription once the new one is in place
+// Subscribe to the cursors and chats on this tab's page, replacing the
+// previous page's subscription once the new one is in place
 const syncCursorSubscription = () =>
 {
   const { confirmedLocation } = getMultiplayerState();
@@ -122,6 +125,8 @@ const syncCursorSubscription = () =>
   }
   cursorPage = page;
   clearCursors();
+  // The server dropped this tab's chat with the old page
+  closeChat(false);
   const previous = cursorSubscription;
   cursorSubscription = connection
     .subscriptionBuilder()
@@ -132,7 +137,10 @@ const syncCursorSubscription = () =>
         previous.unsubscribe();
       }
     })
-    .subscribe(`SELECT * FROM cursor WHERE page = ${page}`);
+    .subscribe([
+      `SELECT * FROM cursor WHERE page = ${page}`,
+      `SELECT * FROM chat WHERE page = ${page}`,
+    ]);
 };
 
 const showCursor = (row: CursorRow) =>
@@ -147,6 +155,59 @@ const showCursor = (row: CursorRow) =>
 };
 
 const hideCursor = (row: CursorRow) => removeCursor(row.connectionId.toHexString());
+
+const showChat = (row: ChatRow) =>
+{
+  const id = row.connectionId.toHexString();
+  if (id === connection?.connectionId.toHexString() || row.page !== cursorPage)
+  {
+    return;
+  }
+  updateChat(id, row.message, row.text);
+};
+
+const hideChat = (row: ChatRow) => removeChat(row.connectionId.toHexString());
+
+// ---- Sending this tab's chat ----
+
+// Typing is sent as it happens, but at most CURSOR_UPDATES_PER_SECOND times a
+// second; the latest text always goes out.
+let pendingChat: { message: number; text: string } | null = null;
+let chatTimer = 0;
+let lastChatSend = 0;
+
+const flushChat = () =>
+{
+  chatTimer = 0;
+  if (!pendingChat || !connection || !connected)
+  {
+    return;
+  }
+  lastChatSend = performance.now();
+  connection.reducers.setChat(pendingChat).catch(() => {});
+  pendingChat = null;
+};
+
+const sendChat = (message: number, text: string) =>
+{
+  pendingChat = { message, text };
+  if (!chatTimer)
+  {
+    const wait = Math.max(0, lastChatSend + 1000 / CURSOR_UPDATES_PER_SECOND - performance.now());
+    chatTimer = window.setTimeout(flushChat, wait);
+  }
+};
+
+const sendCloseChat = (tellServer: boolean) =>
+{
+  pendingChat = null;
+  window.clearTimeout(chatTimer);
+  chatTimer = 0;
+  if (tellServer && connection && connected)
+  {
+    connection.reducers.closeChat({}).catch(() => {});
+  }
+};
 
 // ---- Sending this tab's cursor ----
 
@@ -237,6 +298,7 @@ const onConnected = (conn: DbConnection) =>
 const onLost = (status: "reconnecting" | "offline") =>
 {
   connected = false;
+  closeChat(false);
   updateMultiplayerState({ status, confirmedLocation: "" });
 };
 
@@ -258,6 +320,9 @@ const connect = (token: string | undefined) =>
       conn.db.cursor.onInsert((_ctx, row) => showCursor(row));
       conn.db.cursor.onUpdate((_ctx, _old, row) => showCursor(row));
       conn.db.cursor.onDelete((_ctx, row) => hideCursor(row));
+      conn.db.chat.onInsert((_ctx, row) => showChat(row));
+      conn.db.chat.onUpdate((_ctx, _old, row) => showChat(row));
+      conn.db.chat.onDelete((_ctx, row) => hideChat(row));
       conn
         .subscriptionBuilder()
         .onApplied(recount)
@@ -296,6 +361,11 @@ export const startMultiplayer = () =>
     subscribeMultiplayer(syncLocation);
     subscribeMultiplayer(syncCursorSubscription);
     trackPointer();
+    startLocalChat({
+      available: () => connected && !!getMultiplayerState().confirmedLocation,
+      send: sendChat,
+      close: sendCloseChat,
+    });
     connect(readToken());
   }
 };

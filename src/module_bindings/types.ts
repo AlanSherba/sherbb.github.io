@@ -10,6 +10,14 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Chat = __t.object("Chat", {
+  connectionId: __t.connectionId(),
+  page: __t.u32(),
+  message: __t.u32(),
+  text: __t.string(),
+});
+export type Chat = __Infer<typeof Chat>;
+
 export const Cursor = __t.object("Cursor", {
   connectionId: __t.connectionId(),
   page: __t.u32(),

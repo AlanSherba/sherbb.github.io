@@ -1,3 +1,4 @@
+import { ChatBubble } from "./chatBubble";
 import { CURSOR_TIP, cursorSvg } from "./cursorShape";
 import {
   PANEL_HIDDEN,
@@ -40,6 +41,7 @@ const MAX_GAP = 0.25;
 
 interface RemoteCursor {
   element: HTMLDivElement;
+  bubble: ChatBubble; // their chat, beside the cursor
   panel: number; // PANEL_HIDDEN while hidden
   // All points are in `panel` coordinates
   position: Point; // where the cursor is drawn
@@ -50,13 +52,16 @@ interface RemoteCursor {
 }
 
 const cursors = new Map<string, RemoteCursor>();
+// What each person is typing, kept apart from cursors because a chat can
+// arrive before its cursor does
+const chats = new Map<string, { message: number; text: string }>();
 let layer: HTMLElement | null = null;
 let frame = 0;
 let lastFrame = 0;
 
 // A color picked from the cursor's id, so everyone sees the same color for
 // the same person
-const cursorColor = (id: string) =>
+export const cursorColor = (id: string) =>
 {
   let hash = 0;
   for (let i = 0; i < id.length; i++)
@@ -169,12 +174,21 @@ export const updateCursor = (id: string, panel: number, target: Point) =>
   let cursor = cursors.get(id);
   if (!cursor)
   {
+    const color = cursorColor(id);
     const element = document.createElement("div");
     element.className = "absolute left-0 top-0 opacity-0 transition-opacity duration-150 will-change-transform";
-    element.innerHTML = cursorSvg(cursorColor(id));
+    element.innerHTML = cursorSvg(color);
+    const bubble = new ChatBubble(color);
+    element.appendChild(bubble.element);
+    const chat = chats.get(id);
+    if (chat)
+    {
+      bubble.set(chat.message, chat.text);
+    }
     layer?.appendChild(element);
     cursor = {
       element,
+      bubble,
       panel,
       position: { ...target },
       velocity: { x: 0, y: 0 },
@@ -221,8 +235,28 @@ export const removeCursor = (id: string) =>
   cursors.delete(id);
 };
 
+// Clears cursors and chats, for example when this tab changes page
 export const clearCursors = () =>
 {
   cursors.forEach((cursor) => cursor.element.remove());
   cursors.clear();
+  chats.clear();
+};
+
+export const updateChat = (id: string, message: number, text: string) =>
+{
+  chats.set(id, { message, text });
+  cursors.get(id)?.bubble.set(message, text);
+};
+
+export const removeChat = (id: string) =>
+{
+  chats.delete(id);
+  cursors.get(id)?.bubble.clear();
+};
+
+// Add an element (this visitor's own chat bubble) to the cursor layer
+export const addToCursorLayer = (element: HTMLElement) =>
+{
+  layer?.appendChild(element);
 };

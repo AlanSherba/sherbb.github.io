@@ -117,3 +117,10 @@ code {
 [data-custom-cursor] * {
   cursor: var(--local-cursor) !important;
 }
+
+/* While cursor chat is open the page draws the pointer itself, because the
+   operating system hides its pointer during typing (see localChat.ts). */
+html[data-drawn-pointer] [data-custom-cursor],
+html[data-drawn-pointer] [data-custom-cursor] * {
+  cursor: none !important;
+}

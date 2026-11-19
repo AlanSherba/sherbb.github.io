@@ -6,9 +6,13 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import CloseChatReducer from "../close_chat_reducer";
 import MoveCursorReducer from "../move_cursor_reducer";
+import SetChatReducer from "../set_chat_reducer";
 import SetLocationReducer from "../set_location_reducer";
 
+export type CloseChatParams = __Infer<typeof CloseChatReducer>;
 export type MoveCursorParams = __Infer<typeof MoveCursorReducer>;
+export type SetChatParams = __Infer<typeof SetChatReducer>;
 export type SetLocationParams = __Infer<typeof SetLocationReducer>;
 

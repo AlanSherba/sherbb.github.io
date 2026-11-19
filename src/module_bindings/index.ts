@@ -34,12 +34,15 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import CloseChatReducer from "./close_chat_reducer";
 import MoveCursorReducer from "./move_cursor_reducer";
+import SetChatReducer from "./set_chat_reducer";
 import SetLocationReducer from "./set_location_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import ChatRow from "./chat_table";
 import CursorRow from "./cursor_table";
 import PageReadersRow from "./page_readers_table";
 
@@ -47,6 +50,20 @@ import PageReadersRow from "./page_readers_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  chat: __table({
+    name: 'chat',
+    indexes: [
+      { accessor: 'connection_id', name: 'chat_connection_id_idx_btree', algorithm: 'btree', columns: [
+        'connectionId',
+      ] },
+      { accessor: 'page', name: 'chat_page_idx_btree', algorithm: 'btree', columns: [
+        'page',
+      ] },
+    ],
+    constraints: [
+      { name: 'chat_connection_id_key', constraint: 'unique', columns: ['connectionId'] },
+    ],
+  }, ChatRow),
   cursor: __table({
     name: 'cursor',
     indexes: [
@@ -76,7 +93,9 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("close_chat", CloseChatReducer),
   __reducerSchema("move_cursor", MoveCursorReducer),
+  __reducerSchema("set_chat", SetChatReducer),
   __reducerSchema("set_location", SetLocationReducer),
 );
 

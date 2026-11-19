@@ -6,6 +6,9 @@ const PANEL_MAX: u8 = 2;
 // Cursor coordinates are pixels; anything beyond this is junk
 const MAX_COORD: f32 = 100_000.0;
 
+// Longest chat text, in bytes (the client limits it to 120 characters)
+const MAX_CHAT_LEN: usize = 480;
+
 // Longest location a client may report. Locations are short keys like
 // "projects/Gridform" or "blog/markdown-test".
 const MAX_LOCATION_LEN: usize = 128;
@@ -54,6 +57,25 @@ pub struct Cursor {
     // above the name), 1 = the scrolled list of pages, 2 = the scrolled page
     // details. 255 = hidden (pointer left the window).
     pub panel: u8,
+}
+
+// What each tab is typing in its cursor chat, like Figma's cursor chat. One
+// row per tab with chat open; the row is removed when chat closes, the tab
+// changes page, or it disconnects. Kept apart from `cursor` so cursor moves
+// never carry text, and typing never carries a position. Clients subscribe
+// to their page's rows: SELECT * FROM chat WHERE page = <page_id(location)>.
+#[spacetimedb::table(accessor = chat, public)]
+pub struct Chat {
+    #[primary_key]
+    pub connection_id: ConnectionId,
+    #[index(btree)]
+    pub page: u32,
+    // Counts the messages this tab has started. Pressing Enter starts a new
+    // one: the count goes up and the text empties. Clients animate the
+    // previous text away when they see the count change.
+    pub message: u32,
+    // The message as typed so far, updated as the person types
+    pub text: String,
 }
 
 // 32-bit FNV-1a hash of a location. The client computes the same hash to
@@ -109,6 +131,7 @@ fn remove_connection(ctx: &ReducerContext, connection_id: ConnectionId) {
         ctx.db.online().connection_id().delete(connection_id);
     }
     ctx.db.cursor().connection_id().delete(connection_id);
+    ctx.db.chat().connection_id().delete(connection_id);
 }
 
 #[spacetimedb::reducer(client_connected)]
@@ -147,8 +170,9 @@ pub fn set_location(ctx: &ReducerContext, location: String) -> Result<(), String
     if row.location != location {
         leave(ctx, &row.location);
         enter(ctx, &location);
-        // The cursor belonged to the old page
+        // The cursor and chat belonged to the old page
         ctx.db.cursor().connection_id().delete(connection_id);
+        ctx.db.chat().connection_id().delete(connection_id);
         ctx.db.online().connection_id().update(Online { location, ..row });
     }
     Ok(())
@@ -184,5 +208,40 @@ pub fn move_cursor(ctx: &ReducerContext, x: f32, y: f32, panel: u8) -> Result<()
     } else {
         ctx.db.cursor().insert(cursor);
     }
+    Ok(())
+}
+
+// Open chat, or update what this tab is typing. `message` is the tab's
+// message count (see Chat::message).
+#[spacetimedb::reducer]
+pub fn set_chat(ctx: &ReducerContext, message: u32, text: String) -> Result<(), String> {
+    if text.len() > MAX_CHAT_LEN {
+        return Err("chat text too long".into());
+    }
+    let connection_id = ctx.connection_id().ok_or("no connection")?;
+    let Some(row) = ctx.db.online().connection_id().find(connection_id) else {
+        return Err("not connected".into());
+    };
+    if row.location.is_empty() {
+        return Ok(());
+    }
+    let chat = Chat {
+        connection_id,
+        page: page_id(&row.location),
+        message,
+        text,
+    };
+    if ctx.db.chat().connection_id().find(connection_id).is_some() {
+        ctx.db.chat().connection_id().update(chat);
+    } else {
+        ctx.db.chat().insert(chat);
+    }
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn close_chat(ctx: &ReducerContext) -> Result<(), String> {
+    let connection_id = ctx.connection_id().ok_or("no connection")?;
+    ctx.db.chat().connection_id().delete(connection_id);
     Ok(())
 }
