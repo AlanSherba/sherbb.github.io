@@ -191,12 +191,12 @@ function App()
           <h2 className="font-serif text-5xl text-white">
             {selectedProject.title}
           </h2>
-          <p className="whitespace-pre-line font-mono leading-relaxed text-white opacity-70">
+          <p className="whitespace-pre-line font-mono leading-relaxed text-white opacity-30">
             {selectedProject.description}
           </p>
           {selectedProject.link && selectedProject.linkText && (
             <a
-              className="w-fit font-serif text-xl text-accent underline underline-offset-2"
+              className="w-fit font-serif text-xl text-accent underline-offset-2 opacity-70 hover:underline hover:opacity-100"
               target="_blank"
               rel="noopener noreferrer"
               href={selectedProject.link}

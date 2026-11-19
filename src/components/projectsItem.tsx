@@ -10,7 +10,7 @@ const ProjectListItem = (props: ProjectListItemProps) => (
   <div
     className={
       "group relative flex cursor-pointer select-none gap-4 py-0.5 font-mono " +
-      (props.selected ? "opacity-100" : "opacity-70 hover:opacity-100")
+      (props.selected ? "opacity-100" : "opacity-50 hover:opacity-100")
     }
     onClick={props.onClick}
   >
