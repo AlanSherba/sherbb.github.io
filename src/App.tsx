@@ -106,16 +106,10 @@ function App()
         <h1 className="whitespace-nowrap font-serif text-4xl italic text-white">
           Alan Sherba
         </h1>
-        {/* Looping marquee of roles, scrolling left to right */}
-        <div className="min-w-0 flex-1 self-center overflow-hidden">
-          <div className="flex w-max animate-marquee select-none font-mono text-sm tracking-wider text-neutral-500">
-            {[0, 1].map((half) => (
-              <span key={half} className="whitespace-pre">
-                {"Creative Director - Engineer - Designer - Artist - Gaming Enthusiast - ".repeat(6)}
-              </span>
-            ))}
-          </div>
-        </div>
+        {/* Roles */}
+        <p className="min-w-0 flex-1 self-center truncate font-mono text-sm tracking-wider text-neutral-500">
+          Creative Director, Engineer, Designer, Artist, Gaming Enthusiast
+        </p>
 
         {/* Contact dropdown */}
         <div className="relative">
