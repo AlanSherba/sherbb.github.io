@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import ProjectListItem from "./components/projectsItem";
+import ContentList, { ListEntry } from "./components/ContentList";
+import ModeTabs, { SiteMode } from "./components/ModeTabs";
 import
 {
   ProjectCategories,
@@ -11,9 +12,18 @@ import { useSearchParams } from "react-router-dom";
 
 const prefetchedImages: HTMLImageElement[] = [];
 
+const projectEntries: ListEntry[] = ProjectDatabase.map((project) => ({
+  key: project.title,
+  title: project.title,
+  subtitle: project.subtitle,
+  year: project.year,
+  category: project.category,
+}));
+
 function App()
 {
   const [searchParams, setSearchParams] = useSearchParams();
+  const mode: SiteMode = searchParams.get("tab") === "blog" ? "blog" : "projects";
 
   // Pre-fetch all project media after page load so project switching feels instant
   useEffect(() => {
@@ -60,6 +70,11 @@ function App()
   // and use browser BACK between projects.
   useEffect(() =>
   {
+    // Keep the last viewed project while on another tab
+    if (searchParams.get("tab") === "blog")
+    {
+      return;
+    }
     for (let i = 0; i < ProjectDatabase.length; i++)
     {
       if (searchParams.get("project") === ProjectDatabase[i].title)
@@ -83,6 +98,17 @@ function App()
     descriptionRef.current?.scrollTo(0, 0);
   }, [selectedProject]);
 
+  const setMode = (newMode: SiteMode) =>
+  {
+    if (newMode === mode)
+    {
+      return;
+    }
+    setSearchParams(
+      newMode === "blog" ? { tab: "blog" } : { project: selectedProject.title },
+    );
+  };
+
   const setProject = (projectTitle: string) =>
   {
     if (projectTitle === selectedProject.title)
@@ -102,7 +128,7 @@ function App()
   const Header = () =>
   {
     return (
-      <header className="mx-auto flex w-full max-w-[1500px] flex-row items-baseline gap-8 pb-10 pl-[5.25rem] pr-16 pt-12">
+      <header className="mx-auto flex w-full max-w-[1500px] flex-row items-baseline gap-8 pb-6 pl-[5.25rem] pr-16 pt-12">
         <h1 className="whitespace-nowrap font-serif text-4xl italic text-white">
           Alan Sherba
         </h1>
@@ -112,12 +138,14 @@ function App()
         </p>
 
         {/* Contact dropdown */}
-        <div className="relative">
+        <div className="relative self-center">
           <button
-            className="font-serif text-3xl italic text-accent hover:underline"
+            aria-label="Contact"
+            aria-expanded={contactOpen}
+            className="flex h-6 w-6 items-center justify-center bg-accent font-mono text-xs font-extrabold leading-none text-black hover:opacity-80"
             onClick={() => setContactOpen(!contactOpen)}
           >
-            Contact
+            @
           </button>
           {contactOpen && (
             <>
@@ -125,15 +153,15 @@ function App()
                 className="fixed inset-0 z-10"
                 onClick={() => setContactOpen(false)}
               />
-              <div className="absolute right-0 top-full z-20 flex flex-col items-end gap-2 bg-black py-3 font-mono text-sm">
+              <div className="absolute right-0 top-full z-20 mt-2.5 flex flex-col items-start gap-0.5 whitespace-nowrap bg-accent px-3 py-2.5 font-mono text-base text-white">
                 <a
-                  className="select-text text-accent hover:underline"
+                  className="select-text underline-offset-4 hover:underline"
                   href="mailto:hello@less3.design"
                 >
                   hello@less3.design
                 </a>
                 <a
-                  className="text-accent hover:underline"
+                  className="underline-offset-4 hover:underline"
                   href="https://twitter.com/AlanSherba"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -141,7 +169,7 @@ function App()
                   Twitter
                 </a>
                 <a
-                  className="text-accent hover:underline"
+                  className="underline-offset-4 hover:underline"
                   href="https://www.linkedin.com/in/alan-sherba-365784141/"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -156,30 +184,41 @@ function App()
     );
   };
 
-  const List = () =>
+  const Sidebar = () =>
   {
     return (
-      <nav className="w-[42%] max-w-2xl overflow-y-auto pb-16 pl-5 pr-8">
-        {ProjectCategories.map((category) => (
-          <div key={category} className="flex flex-col">
-            <p className="select-none py-1 font-mono text-neutral-600">
-              {category}
-            </p>
-            {ProjectDatabase.filter((p) => p.category === category).map(
-              (project) => (
-                <ProjectListItem
-                  key={project.title}
-                  title={project.title}
-                  subtitle={project.subtitle}
-                  year={project.year}
-                  selected={project.title === selectedProject.title}
-                  onClick={() => setProject(project.title)}
-                />
-              ),
-            )}
-          </div>
-        ))}
-      </nav>
+      <div className="flex min-h-0 w-[42%] max-w-2xl flex-col">
+        <ModeTabs mode={mode} onChange={setMode} />
+        {mode === "projects" ? (
+          <ContentList
+            categories={ProjectCategories}
+            entries={projectEntries}
+            selectedKey={selectedProject.title}
+            onSelect={setProject}
+          />
+        ) : (
+          <ContentList
+            categories={[]}
+            entries={[]}
+            onSelect={() => {}}
+            emptyText="No posts yet"
+          />
+        )}
+      </div>
+    );
+  };
+
+  const BlogPlaceholder = () =>
+  {
+    return (
+      <main className="flex-1 overflow-y-auto pb-16 pr-12">
+        <div className="flex max-w-3xl flex-col gap-6">
+          <h2 className="font-serif text-[3.5rem] leading-none text-white">Blog</h2>
+          <p className="font-mono leading-relaxed text-white opacity-30">
+            Nothing here
+          </p>
+        </div>
+      </main>
     );
   };
 
@@ -188,7 +227,7 @@ function App()
     return (
       <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
         <div className="flex max-w-3xl flex-col gap-6">
-          <h2 className="font-serif text-5xl text-white">
+          <h2 className="font-serif text-[3.5rem] leading-none text-white">
             {selectedProject.title}
           </h2>
           <p className="whitespace-pre-line font-mono leading-relaxed text-white opacity-30">
@@ -244,11 +283,14 @@ function App()
   };
 
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden bg-black font-mono text-white">
+    <div
+      data-mode={mode}
+      className="absolute inset-0 flex flex-col overflow-hidden bg-black font-mono text-white"
+    >
       {Header()}
       <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-row gap-8 px-16">
-        {List()}
-        {Description()}
+        {Sidebar()}
+        {mode === "projects" ? Description() : BlogPlaceholder()}
       </div>
     </div>
   );

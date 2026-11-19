@@ -8,7 +8,13 @@ module.exports = {
       },
       colors: {
         offwhite: "#FFFFE3",
-        accent: "#2E62FF",
+        // Follows the current page mode; set by --accent in index.css
+        accent: "rgb(var(--accent) / <alpha-value>)",
+        // Fixed per-mode colors, used by the mode switch
+        mode: {
+          projects: "#2E62FF",
+          blog: "#E63A00",
+        },
       },
       fontFamily: {
         serif: ['"Instrument Serif"', "Georgia", "serif"],

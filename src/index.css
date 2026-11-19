@@ -4,6 +4,16 @@
 
 @import "css/inriaSerif.css";
 
+/* Accent color per page mode, as "R G B" so Tailwind opacity modifiers work.
+   Keep in sync with the mode colors in tailwind.config.js. */
+:root {
+  --accent: 46 98 255; /* projects #2E62FF */
+}
+
+[data-mode="blog"] {
+  --accent: 230 58 0; /* blog #E63A00 */
+}
+
 body {
   margin: 0;
   height: 100%;
@@ -21,14 +31,15 @@ code {
     monospace;
 }
 
+/* Text selection: solid current-mode accent with black text */
 ::-moz-selection { /* Code for Firefox */
   color: black;
-  background: #FFFFE3;
+  background: rgb(var(--accent));
 }
 
 ::selection {
   color: black;
-  background: #FFFFE3;
+  background: rgb(var(--accent));
 }
 
 * {
