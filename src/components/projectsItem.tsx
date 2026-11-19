@@ -1,12 +1,11 @@
 interface ProjectListItemProps {
   title: string;
-  subtitle: string;
   year: string;
   selected: boolean;
   onClick: () => void;
 }
 
-// Subtitle and year: dimmed grey, or dimmed accent on the selected row
+// Year: dimmed grey, or dimmed accent on the selected row
 const secondaryText = (selected: boolean) =>
   selected ? "text-accent/50" : "text-neutral-500";
 
@@ -23,7 +22,7 @@ const ProjectListItem = (props: ProjectListItemProps) => (
     )}
     <p
       className={
-        "whitespace-nowrap " +
+        "min-w-0 truncate " +
         (props.selected
           ? "font-bold text-accent"
           : "text-white group-hover:underline group-hover:underline-offset-4")
@@ -31,11 +30,8 @@ const ProjectListItem = (props: ProjectListItemProps) => (
     >
       {props.title}
     </p>
-    <p className={"hidden whitespace-nowrap lg:block " + secondaryText(props.selected)}>
-      {props.subtitle}
-    </p>
     <div className="flex-grow" />
-    <p className={"hidden md:block " + secondaryText(props.selected)}>
+    <p className={"hidden shrink-0 md:block " + secondaryText(props.selected)}>
       {props.year}
     </p>
   </div>

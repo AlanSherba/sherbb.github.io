@@ -42,6 +42,57 @@ code {
   background: rgb(var(--accent));
 }
 
+/* Code highlighting for blog posts (highlight.js classes from rehype-highlight).
+   Soft pastels at reduced strength so code blocks stay calm; anything
+   unlisted keeps the block's dim white. */
+.hljs-comment,
+.hljs-quote,
+.hljs-doctag {
+  color: rgb(255 255 255 / 0.25);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-literal,
+.hljs-selector-tag {
+  color: rgb(199 146 234 / 0.85); /* violet */
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-char\.escape_ {
+  color: rgb(165 214 167 / 0.85); /* green */
+}
+.hljs-number,
+.hljs-symbol {
+  color: rgb(247 181 115 / 0.85); /* orange */
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-name {
+  color: rgb(130 170 255 / 0.85); /* blue */
+}
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_ {
+  color: rgb(127 219 202 / 0.85); /* teal */
+}
+.hljs-meta,
+.hljs-attr,
+.hljs-attribute,
+.hljs-property {
+  color: rgb(230 195 132 / 0.85); /* sand */
+}
+.hljs-deletion {
+  color: rgb(240 113 120 / 0.85); /* red */
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #ffffff2e transparent;

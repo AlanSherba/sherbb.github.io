@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { BlogPost, blogCategories, loadBlogPosts } from "./BlogPosts";
+import BlogPostView from "./components/BlogPostView";
 import ContentList, { ListEntry } from "./components/ContentList";
 import ModeTabs, { SiteMode } from "./components/ModeTabs";
 import
@@ -89,14 +91,50 @@ function App()
   const [selectedProject, setSelectedProject] =
     useState<ProjectData>(initProject());
 
+  // Blog posts load once in the background; null until they arrive
+  const [posts, setPosts] = useState<BlogPost[] | null>(null);
+  useEffect(() =>
+  {
+    loadBlogPosts()
+      .then(setPosts)
+      .catch(() => setPosts([]));
+  }, []);
+
+  const postEntries: ListEntry[] = useMemo(
+    () =>
+      (posts ?? []).map((post) => ({
+        key: post.slug,
+        title: post.title,
+        subtitle: post.subtitle,
+        year: post.date.slice(0, 4),
+        category: post.category,
+      })),
+    [posts],
+  );
+
+  // The post in the URL, or the newest one
+  const postParam = searchParams.get("post");
+  const selectedPost =
+    posts?.find((post) => post.slug === postParam) ?? posts?.[0];
+
+  // Remember the last post read, to return to it from the Projects tab
+  const lastPostSlug = useRef<string | null>(null);
+  useEffect(() =>
+  {
+    if (mode === "blog" && selectedPost)
+    {
+      lastPostSlug.current = selectedPost.slug;
+    }
+  }, [mode, selectedPost]);
+
   const [contactOpen, setContactOpen] = useState(false);
   const descriptionRef = useRef<HTMLElement>(null);
 
-  // Reset the description scroll position when switching projects
+  // Reset the content scroll position when switching projects or posts
   useEffect(() =>
   {
     descriptionRef.current?.scrollTo(0, 0);
-  }, [selectedProject]);
+  }, [selectedProject, selectedPost?.slug, mode]);
 
   const setMode = (newMode: SiteMode) =>
   {
@@ -104,9 +142,25 @@ function App()
     {
       return;
     }
-    setSearchParams(
-      newMode === "blog" ? { tab: "blog" } : { project: selectedProject.title },
-    );
+    if (newMode === "blog")
+    {
+      setSearchParams(
+        lastPostSlug.current
+          ? { tab: "blog", post: lastPostSlug.current }
+          : { tab: "blog" },
+      );
+      return;
+    }
+    setSearchParams({ project: selectedProject.title });
+  };
+
+  const setPost = (slug: string) =>
+  {
+    if (slug === selectedPost?.slug)
+    {
+      return;
+    }
+    setSearchParams({ tab: "blog", post: slug });
   };
 
   const setProject = (projectTitle: string) =>
@@ -128,7 +182,7 @@ function App()
   const Header = () =>
   {
     return (
-      <header className="mx-auto flex w-full max-w-[1500px] flex-row items-baseline gap-8 pb-6 pl-[5.25rem] pr-16 pt-12">
+      <header className="mx-auto flex w-full max-w-[1264px] flex-row items-baseline gap-8 pb-6 pl-[5.25rem] pr-16 pt-12">
         <h1 className="whitespace-nowrap font-serif text-4xl italic text-white">
           Alan Sherba
         </h1>
@@ -187,7 +241,7 @@ function App()
   const Sidebar = () =>
   {
     return (
-      <div className="flex min-h-0 w-[42%] max-w-2xl flex-col">
+      <div className="flex min-h-0 w-72 shrink-0 flex-col">
         <ModeTabs mode={mode} onChange={setMode} />
         {mode === "projects" ? (
           <ContentList
@@ -198,26 +252,35 @@ function App()
           />
         ) : (
           <ContentList
-            categories={[]}
-            entries={[]}
-            onSelect={() => {}}
-            emptyText="No posts yet"
+            categories={blogCategories(posts ?? [])}
+            entries={postEntries}
+            selectedKey={selectedPost?.slug}
+            onSelect={setPost}
+            emptyText={posts ? "No posts yet" : undefined}
           />
         )}
       </div>
     );
   };
 
-  const BlogPlaceholder = () =>
+  const Blog = () =>
   {
     return (
-      <main className="flex-1 overflow-y-auto pb-16 pr-12">
-        <div className="flex max-w-3xl flex-col gap-6">
-          <h2 className="font-serif text-[3.5rem] leading-none text-white">Blog</h2>
-          <p className="font-mono leading-relaxed text-white opacity-30">
-            Nothing here
-          </p>
-        </div>
+      <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
+        {selectedPost ? (
+          <BlogPostView post={selectedPost} />
+        ) : (
+          posts && (
+            <div className="flex max-w-3xl flex-col gap-6">
+              <h2 className="font-serif text-[3.5rem] leading-none text-white">
+                Blog
+              </h2>
+              <p className="font-mono leading-relaxed text-white opacity-30">
+                Nothing here
+              </p>
+            </div>
+          )
+        )}
       </main>
     );
   };
@@ -288,9 +351,9 @@ function App()
       className="absolute inset-0 flex flex-col overflow-hidden bg-black font-mono text-white"
     >
       {Header()}
-      <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-row gap-8 px-16">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1264px] flex-1 flex-row gap-8 px-16">
         {Sidebar()}
-        {mode === "projects" ? Description() : BlogPlaceholder()}
+        {mode === "projects" ? Description() : Blog()}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 import ProjectListItem from "./projectsItem";
 
 // A row in the left-hand table of contents. Both projects and blog posts
-// are mapped to this shape so they share one list.
+// are mapped to this shape so they share one list. The subtitle isn't shown
+// in the list right now but is kept for later use.
 export interface ListEntry {
   key: string;
   title: string;
@@ -47,7 +48,6 @@ const ContentList = ({
             <ProjectListItem
               key={entry.key}
               title={entry.title}
-              subtitle={entry.subtitle}
               year={entry.year}
               selected={entry.key === selectedKey}
               onClick={() => onSelect(entry.key)}
