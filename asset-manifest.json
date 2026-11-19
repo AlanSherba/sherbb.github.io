@@ -1,13 +1,30 @@
 {
   "files": {
-    "main.css": "/static/css/main.06913952.css",
-    "main.js": "/static/js/main.1f4f6fb8.js",
+    "main.css": "/static/css/main.09ec04e7.css",
+    "main.js": "/static/js/main.41401462.js",
+    "static/js/677.467a7ea2.chunk.js": "/static/js/677.467a7ea2.chunk.js",
+    "static/js/157.5f23440b.chunk.js": "/static/js/157.5f23440b.chunk.js",
+    "static/media/markdown-test.md": "/static/media/markdown-test.03d169a396b0a40d462f.md",
+    "static/media/01-animal-company.md": "/static/media/01-animal-company.892932de9bc3fb8e42fe.md",
+    "static/media/02-gridform.md": "/static/media/02-gridform.96e17fc50905267a9994.md",
     "index.html": "/index.html",
-    "main.06913952.css.map": "/static/css/main.06913952.css.map",
-    "main.1f4f6fb8.js.map": "/static/js/main.1f4f6fb8.js.map"
+    "static/media/07-shooty-shooty.md": "/static/media/07-shooty-shooty.2ade7d4278e9a1f4bf92.md",
+    "static/media/03-the-gauntlet.md": "/static/media/03-the-gauntlet.dc1cbd7494ef395bf097.md",
+    "static/media/05-spatial-io.md": "/static/media/05-spatial-io.208a38df503c4fc1ca4b.md",
+    "static/media/08-punch-hero.md": "/static/media/08-punch-hero.dc856090ae94482d3fab.md",
+    "static/media/04-loot-corp.md": "/static/media/04-loot-corp.11ee01550c318c23f118.md",
+    "static/media/06-creator-toolkit.md": "/static/media/06-creator-toolkit.a0a589e24eb410924ee4.md",
+    "static/media/11-itch-games.md": "/static/media/11-itch-games.b4e866c1aadcf770f036.md",
+    "static/media/10-this-website.md": "/static/media/10-this-website.6a2474de0e34d8b7a2f5.md",
+    "static/media/12-music.md": "/static/media/12-music.4ba254bb4febfcd9dceb.md",
+    "static/media/09-less3.md": "/static/media/09-less3.796230091b6a455e448b.md",
+    "main.09ec04e7.css.map": "/static/css/main.09ec04e7.css.map",
+    "main.41401462.js.map": "/static/js/main.41401462.js.map",
+    "677.467a7ea2.chunk.js.map": "/static/js/677.467a7ea2.chunk.js.map",
+    "157.5f23440b.chunk.js.map": "/static/js/157.5f23440b.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.06913952.css",
-    "static/js/main.1f4f6fb8.js"
+    "static/css/main.09ec04e7.css",
+    "static/js/main.41401462.js"
   ]
 }
