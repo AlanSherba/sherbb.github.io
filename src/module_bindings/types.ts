@@ -69,6 +69,16 @@ export const Online = __t.object("Online", {
 });
 export type Online = __Infer<typeof Online>;
 
+export const Owner = __t.object("Owner", {
+  identity: __t.identity(),
+});
+export type Owner = __Infer<typeof Owner>;
+
+export const OwnerTab = __t.object("OwnerTab", {
+  connectionId: __t.connectionId(),
+});
+export type OwnerTab = __Infer<typeof OwnerTab>;
+
 export const PageReaders = __t.object("PageReaders", {
   location: __t.string(),
   readers: __t.u32(),

@@ -34,9 +34,11 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ClaimOwnerReducer from "./claim_owner_reducer";
 import CloseChatReducer from "./close_chat_reducer";
 import DeleteGuestMessageReducer from "./delete_guest_message_reducer";
 import MoveCursorReducer from "./move_cursor_reducer";
+import ReleaseOwnerReducer from "./release_owner_reducer";
 import ReportGuestMessageReducer from "./report_guest_message_reducer";
 import RingBellReducer from "./ring_bell_reducer";
 import SetChatReducer from "./set_chat_reducer";
@@ -49,6 +51,8 @@ import SignGuestBookReducer from "./sign_guest_book_reducer";
 import BellRow from "./bell_table";
 import ChatRow from "./chat_table";
 import CursorRow from "./cursor_table";
+import OwnerRow from "./owner_table";
+import OwnerTabRow from "./owner_tab_table";
 import PageReadersRow from "./page_readers_table";
 import RecentGuestMessagesRow from "./recent_guest_messages_table";
 
@@ -95,6 +99,28 @@ const tablesSchema = __schema({
       { name: 'cursor_connection_id_key', constraint: 'unique', columns: ['connectionId'] },
     ],
   }, CursorRow),
+  owner: __table({
+    name: 'owner',
+    indexes: [
+      { accessor: 'identity', name: 'owner_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'owner_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, OwnerRow),
+  ownerTab: __table({
+    name: 'owner_tab',
+    indexes: [
+      { accessor: 'connection_id', name: 'owner_tab_connection_id_idx_btree', algorithm: 'btree', columns: [
+        'connectionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'owner_tab_connection_id_key', constraint: 'unique', columns: ['connectionId'] },
+    ],
+  }, OwnerTabRow),
   pageReaders: __table({
     name: 'page_readers',
     indexes: [
@@ -117,9 +143,11 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("claim_owner", ClaimOwnerReducer),
   __reducerSchema("close_chat", CloseChatReducer),
   __reducerSchema("delete_guest_message", DeleteGuestMessageReducer),
   __reducerSchema("move_cursor", MoveCursorReducer),
+  __reducerSchema("release_owner", ReleaseOwnerReducer),
   __reducerSchema("report_guest_message", ReportGuestMessageReducer),
   __reducerSchema("ring_bell", RingBellReducer),
   __reducerSchema("set_chat", SetChatReducer),
@@ -133,6 +161,8 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
+    /** @deprecated Use `ownerTab` instead. This alias will be removed in the next major version. */
+    readonly "owner_tab": Omit<typeof tablesSchema.schemaType.tables["ownerTab"], "accessorName"> & { readonly accessorName: "owner_tab" };
     /** @deprecated Use `pageReaders` instead. This alias will be removed in the next major version. */
     readonly "page_readers": Omit<typeof tablesSchema.schemaType.tables["pageReaders"], "accessorName"> & { readonly accessorName: "page_readers" };
     /** @deprecated Use `recentGuestMessages` instead. This alias will be removed in the next major version. */
@@ -155,6 +185,7 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
+  "owner_tab": "ownerTab",
   "page_readers": "pageReaders",
   "recent_guest_messages": "recentGuestMessages",
 } as const;
@@ -179,6 +210,8 @@ export type DbView = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
+  /** @deprecated Use `ownerTab` instead. This alias will be removed in the next major version. */
+  readonly "owner_tab": __TablesBase["ownerTab"];
   /** @deprecated Use `pageReaders` instead. This alias will be removed in the next major version. */
   readonly "page_readers": __TablesBase["pageReaders"];
   /** @deprecated Use `recentGuestMessages` instead. This alias will be removed in the next major version. */

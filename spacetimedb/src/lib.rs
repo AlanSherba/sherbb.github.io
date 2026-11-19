@@ -34,6 +34,9 @@ pub struct Env {
     // Discord webhook new guest book messages are posted to. While unset,
     // messages are kept but not posted.
     pub DISCORD_GUEST_BOOK_WEBHOOK_URL: Option<String>,
+    // The password that crowns the site owner (see claim_owner). While unset,
+    // or shorter than MIN_OWNER_PASSWORD_CHARS, nobody can claim.
+    pub OWNER_PASSWORD: Option<String>,
 }
 
 // Longest location a client may report. Locations are short keys like
@@ -159,6 +162,7 @@ fn remove_connection(ctx: &ReducerContext, connection_id: ConnectionId) {
     }
     ctx.db.cursor().connection_id().delete(connection_id);
     ctx.db.chat().connection_id().delete(connection_id);
+    ctx.db.owner_tab().connection_id().delete(connection_id);
 }
 
 #[spacetimedb::reducer(client_connected)]
@@ -171,6 +175,9 @@ pub fn client_connected(ctx: &ReducerContext) {
             connected_at: ctx.timestamp,
             location: String::new(),
         });
+        if ctx.db.owner().identity().find(ctx.sender()).is_some() {
+            ctx.db.owner_tab().insert(OwnerTab { connection_id });
+        }
     }
 }
 
@@ -555,6 +562,9 @@ pub fn sign_guest_book(ctx: &ReducerContext, name: String, text: String) -> Resu
     if text.is_empty() {
         return Err("Write a message first".into());
     }
+    if text.starts_with("/claim") || text.starts_with("/unclaim") {
+        return Err("That's a command, not a message".into());
+    }
     if text.chars().count() > MAX_GUEST_MESSAGE_CHARS {
         return Err("Message too long".into());
     }
@@ -629,6 +639,91 @@ fn guest_post_text(post: &GuestPost) -> String {
 pub fn send_guest_post(ctx: &mut ProcedureContext, post: GuestPost) {
     let url = ctx.env.DISCORD_GUEST_BOOK_WEBHOOK_URL();
     post_to_discord(ctx, "Guest book message", url, guest_post_text(&post), None);
+}
+
+// ---- Site owner ----
+//
+// The owner (me) is shown with a crown, on my cursor and my guest book
+// messages. A browser becomes the owner by sending OWNER_PASSWORD (a
+// database setting, never in the source) to claim_owner; the guest book
+// sends it when I type "/claim <password>" as a message. Each browser has
+// its own identity, so each one claims once. To revoke one:
+//   spacetime sql sherbb-site "DELETE FROM owner WHERE identity = 0x..."
+// (its open tabs keep their crown until they reload)
+
+// A short password could be guessed, so it must be at least this long
+const MIN_OWNER_PASSWORD_CHARS: usize = 16;
+
+// Identities that have claimed the owner. Public, so clients can crown
+// their guest book messages.
+#[spacetimedb::table(accessor = owner, public)]
+pub struct Owner {
+    #[primary_key]
+    pub identity: Identity,
+}
+
+// The owner's open tabs, so clients can crown their cursors (which carry a
+// connection, not an identity)
+#[spacetimedb::table(accessor = owner_tab, public)]
+pub struct OwnerTab {
+    #[primary_key]
+    pub connection_id: ConnectionId,
+}
+
+// Compare without stopping at the first difference, so the time taken
+// doesn't hint at how much of a guess was right
+fn same_secret(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
+}
+
+#[spacetimedb::reducer]
+pub fn claim_owner(ctx: &ReducerContext, password: String) -> Result<(), String> {
+    let expected = ctx
+        .env
+        .OWNER_PASSWORD()
+        .filter(|expected| expected.chars().count() >= MIN_OWNER_PASSWORD_CHARS);
+    match expected {
+        Some(expected) if same_secret(password.trim(), &expected) => {}
+        _ => {
+            log::warn!("Wrong owner password from {}", ctx.sender());
+            return Err("Wrong password".into());
+        }
+    }
+    if ctx.db.owner().identity().find(ctx.sender()).is_none() {
+        ctx.db.owner().insert(Owner { identity: ctx.sender() });
+    }
+    // Crown this identity's open tabs
+    let tabs: Vec<ConnectionId> = ctx
+        .db
+        .online()
+        .iter()
+        .filter(|tab| tab.identity == ctx.sender())
+        .map(|tab| tab.connection_id)
+        .collect();
+    for connection_id in tabs {
+        if ctx.db.owner_tab().connection_id().find(connection_id).is_none() {
+            ctx.db.owner_tab().insert(OwnerTab { connection_id });
+        }
+    }
+    log::info!("Owner claimed by {}", ctx.sender());
+    Ok(())
+}
+
+// Give up the crown in this browser
+#[spacetimedb::reducer]
+pub fn release_owner(ctx: &ReducerContext) -> Result<(), String> {
+    ctx.db.owner().identity().delete(ctx.sender());
+    let tabs: Vec<ConnectionId> = ctx
+        .db
+        .online()
+        .iter()
+        .filter(|tab| tab.identity == ctx.sender())
+        .map(|tab| tab.connection_id)
+        .collect();
+    for connection_id in tabs {
+        ctx.db.owner_tab().connection_id().delete(connection_id);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

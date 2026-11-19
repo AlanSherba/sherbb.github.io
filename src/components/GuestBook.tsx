@@ -1,10 +1,13 @@
 import { CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  claimOwner,
   deleteGuestMessage,
   openGuestBook,
+  releaseOwner,
   reportGuestMessage,
   signGuestBook,
 } from "../multiplayer/connection";
+import { crownSvg } from "../multiplayer/cursorShape";
 import { GuestEntry, useMultiplayer } from "../multiplayer/store";
 import MessageField from "./MessageField";
 
@@ -13,6 +16,9 @@ import MessageField from "./MessageField";
 // only while it's open. Visitors can delete their own messages and report
 // anyone else's, which hides it behind a cover for everyone until someone
 // un-reports it (see the guest book in the module).
+//
+// Typing "/claim <password>" as a message crowns this browser as the site
+// owner instead of signing ("/unclaim" undoes it). It is never posted.
 
 const NAME_LENGTH = 24;
 const MESSAGE_LENGTH = 240;
@@ -70,6 +76,15 @@ const RestoreIcon = () => (
     </mask>
     <circle cx="8" cy="8" r="7" fill="currentColor" mask="url(#guest-book-restore)" />
   </svg>
+);
+
+// The site owner's crown, beside their name
+const Crown = () => (
+  <span
+    className="shrink-0"
+    title="Site owner"
+    dangerouslySetInnerHTML={{ __html: crownSvg(26) }}
+  />
 );
 
 const TrashIcon = () => (
@@ -142,7 +157,10 @@ const Entry = ({ entry, fromBottom, revealed, onReveal, onError }: EntryProps) =
   }
   return (
     <li style={fade} className={`relative flex flex-col gap-3 p-3 pr-10 motion-safe:animate-fadeInFast ${entry.reported ? "bg-neutral-900" : "bg-neutral-700"}`}>
-      <span className="truncate font-serif text-3xl leading-none">{entry.name}</span>
+      <span className="flex items-center gap-2">
+        {entry.owner && <Crown />}
+        <span className="truncate font-serif text-3xl leading-none">{entry.name}</span>
+      </span>
       <p className="whitespace-pre-wrap break-words font-mono text-sm leading-relaxed">
         {entry.text}
       </p>
@@ -162,7 +180,14 @@ const Entry = ({ entry, fromBottom, revealed, onReveal, onError }: EntryProps) =
   );
 };
 
-type Phase = "idle" | "signing" | "signed" | "error";
+type Phase = "idle" | "signing" | "signed" | "claimed" | "released" | "error";
+
+// "/claim <password>" or "/unclaim", typed as the message
+const ownerCommand = (message: string) =>
+{
+  const match = /^\/(claim|unclaim)(?:\s+([\s\S]*))?$/.exec(message.trim());
+  return match && { claim: match[1] === "claim", password: match[2] ?? "" };
+};
 
 interface GuestBookProps {
   open: boolean;
@@ -232,10 +257,10 @@ const GuestBook = ({ open }: GuestBookProps) =>
     return () => observer.disconnect();
   }, [hasList]);
 
-  // "Signed!" shows briefly
+  // "Signed!" (and "Crowned!") shows briefly
   useEffect(() =>
   {
-    if (phase !== "signed")
+    if (phase !== "signed" && phase !== "claimed" && phase !== "released")
     {
       return;
     }
@@ -256,6 +281,19 @@ const GuestBook = ({ open }: GuestBookProps) =>
       return;
     }
     setPhase("signing");
+    const command = ownerCommand(message);
+    if (command)
+    {
+      // Never signed: the password goes only to claim_owner
+      (command.claim ? claimOwner(command.password) : releaseOwner())
+        .then(() =>
+        {
+          setPhase(command.claim ? "claimed" : "released");
+          setMessage("");
+        })
+        .catch(fail);
+      return;
+    }
     writeName(name);
     atBottom.current = true;
     signGuestBook(name, message)
@@ -275,6 +313,14 @@ const GuestBook = ({ open }: GuestBookProps) =>
   else if (phase === "signed")
   {
     button = "Signed!";
+  }
+  else if (phase === "claimed")
+  {
+    button = "Crowned!";
+  }
+  else if (phase === "released")
+  {
+    button = "Uncrowned";
   }
 
   // Same spacing as the dinner bell: boxes sit 12px (gap-3) apart and from
@@ -348,7 +394,7 @@ const GuestBook = ({ open }: GuestBookProps) =>
         <button
           type="button"
           className="bg-white py-2 font-mono text-2xl font-bold uppercase tracking-wide text-black transition-colors hover:bg-offwhite disabled:bg-white/40 disabled:text-black/60"
-          disabled={phase === "signing" || phase === "signed" || !message.trim()}
+          disabled={(phase !== "idle" && phase !== "error") || !message.trim()}
           onClick={sign}
         >
           {button}

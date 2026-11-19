@@ -1,5 +1,5 @@
 import { ChatBubble } from "./chatBubble";
-import { CURSOR_TIP, cursorSvg } from "./cursorShape";
+import { CURSOR_TIP, crownSvg, cursorSvg } from "./cursorShape";
 import {
   PANEL_HIDDEN,
   Point,
@@ -55,6 +55,8 @@ const cursors = new Map<string, RemoteCursor>();
 // What each person is typing, kept apart from cursors because a chat can
 // arrive before its cursor does
 const chats = new Map<string, { message: number; text: string }>();
+// The site owner's tabs, whose cursors wear a crown
+const ownerTabs = new Set<string>();
 let layer: HTMLElement | null = null;
 let frame = 0;
 let lastFrame = 0;
@@ -70,6 +72,21 @@ export const cursorColor = (id: string) =>
   }
   const hue = (hash >>> 0) % 360;
   return `hsl(${hue}, 85%, 62%)`;
+};
+
+// A crown sitting on the cursor's top edge, tilted to match it (the edge
+// runs from the tip down to the right at about 27 degrees)
+const makeCrown = (shown: boolean) =>
+{
+  const crown = document.createElement("div");
+  crown.dataset.crown = "";
+  crown.className = "absolute";
+  crown.style.left = "17px";
+  crown.style.top = "-1px";
+  crown.style.transform = "translate(-50%, -50%) rotate(27deg)";
+  crown.style.display = shown ? "" : "none";
+  crown.innerHTML = crownSvg(16);
+  return crown;
 };
 
 const lerp = (a: Point, b: Point, t: number): Point => ({
@@ -180,6 +197,7 @@ export const updateCursor = (id: string, panel: number, target: Point) =>
     element.innerHTML = cursorSvg(color);
     const bubble = new ChatBubble(color);
     element.appendChild(bubble.element);
+    element.appendChild(makeCrown(ownerTabs.has(id)));
     const chat = chats.get(id);
     if (chat)
     {
@@ -227,6 +245,24 @@ export const updateCursor = (id: string, panel: number, target: Point) =>
   }
   cursor.panel = panel;
   startDrawing();
+};
+
+// Mark a tab as the site owner's (or not)
+export const setCursorOwner = (id: string, owner: boolean) =>
+{
+  if (owner)
+  {
+    ownerTabs.add(id);
+  }
+  else
+  {
+    ownerTabs.delete(id);
+  }
+  const crown = cursors.get(id)?.element.querySelector<HTMLElement>("[data-crown]");
+  if (crown)
+  {
+    crown.style.display = owner ? "" : "none";
+  }
 };
 
 export const removeCursor = (id: string) =>

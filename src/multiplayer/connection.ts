@@ -5,6 +5,7 @@ import {
   clearCursors,
   removeChat,
   removeCursor,
+  setCursorOwner,
   updateChat,
   updateCursor,
 } from "./cursors";
@@ -24,7 +25,8 @@ import {
 // Bandwidth: the tab sends one small message when its page changes, and
 // receives only the per-page reader counts, and only the counts that change
 // (plus the dinner bell's single row, which changes once per ring). The
-// guest book's messages are sent only while it's open.
+// guest book's messages are sent only while it's open. The site owner's
+// identities and open tabs (a row or two) are always sent, for their crowns.
 // Cursors: the tab sends its cursor at most CURSOR_UPDATES_PER_SECOND times a
 // second (see cursors.ts), only when it moved and only while someone else is
 // on the same page, and receives only the cursors on its own page.
@@ -312,6 +314,7 @@ const showGuestBook = () =>
     return;
   }
   const me = connection.identity?.toHexString();
+  const owners = new Set(Array.from(connection.db.owner.iter(), (row) => row.identity.toHexString()));
   const entries = Array.from(connection.db.recentGuestMessages.iter(), (row) => ({
     id: row.id,
     name: row.name,
@@ -319,6 +322,7 @@ const showGuestBook = () =>
     sentAt: Number(row.sentAt.toMillis()),
     mine: row.sender.toHexString() === me,
     reported: row.reported,
+    owner: owners.has(row.sender.toHexString()),
   }));
   entries.sort((a, b) => a.sentAt - b.sentAt || Number(a.id - b.id));
   updateMultiplayerState({ guestBook: entries });
@@ -365,6 +369,31 @@ export const deleteGuestMessage = async (id: bigint) =>
 
 export const reportGuestMessage = async (id: bigint, reported: boolean) =>
   guestReducers().reportGuestMessage({ id, reported });
+
+// ---- Site owner ----
+
+const showCrowned = () =>
+{
+  const me = connection?.identity?.toHexString();
+  const crowned = !!me && Array.from(connection!.db.owner.iter()).some((row) => row.identity.toHexString() === me);
+  if (crowned !== getMultiplayerState().crowned)
+  {
+    updateMultiplayerState({ crowned });
+  }
+};
+
+const ownersChanged = () =>
+{
+  showCrowned();
+  showGuestBook();
+};
+
+// Crown this browser as the site owner, if `password` is right (see
+// claim_owner in the module)
+export const claimOwner = async (password: string) =>
+  guestReducers().claimOwner({ password });
+
+export const releaseOwner = async () => guestReducers().releaseOwner({});
 
 const countReaders = (conn: DbConnection) =>
 {
@@ -418,10 +447,19 @@ const connect = (token: string | undefined) =>
       conn.db.bell.onDelete(() => showBell(null));
       conn.db.recentGuestMessages.onInsert(showGuestBook);
       conn.db.recentGuestMessages.onDelete(showGuestBook);
+      conn.db.owner.onInsert(ownersChanged);
+      conn.db.owner.onDelete(ownersChanged);
+      conn.db.ownerTab.onInsert((_ctx, row) => setCursorOwner(row.connectionId.toHexString(), true));
+      conn.db.ownerTab.onDelete((_ctx, row) => setCursorOwner(row.connectionId.toHexString(), false));
       conn
         .subscriptionBuilder()
         .onApplied(recount)
-        .subscribe(["SELECT * FROM page_readers", "SELECT * FROM bell"]);
+        .subscribe([
+          "SELECT * FROM page_readers",
+          "SELECT * FROM bell",
+          "SELECT * FROM owner",
+          "SELECT * FROM owner_tab",
+        ]);
       onConnected(conn);
     })
     .onAutomaticReconnect((conn) => onConnected(conn))

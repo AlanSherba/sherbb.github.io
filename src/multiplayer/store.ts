@@ -23,6 +23,8 @@ export interface MultiplayerState {
   // The guest book's latest messages, oldest first, while it's open; null
   // while it's closed or loading
   guestBook: GuestEntry[] | null;
+  // This browser has claimed the site owner's crown
+  crowned: boolean;
 }
 
 // Times in milliseconds since the Unix epoch, by the server's clock
@@ -42,6 +44,8 @@ export interface GuestEntry {
   mine: boolean;
   // Reported, so hidden behind a cover until revealed
   reported: boolean;
+  // Written by the site owner, so shown with a crown
+  owner: boolean;
 }
 
 let state: MultiplayerState = {
@@ -51,6 +55,7 @@ let state: MultiplayerState = {
   confirmedLocation: "",
   bell: null,
   guestBook: null,
+  crowned: false,
 };
 const listeners = new Set<() => void>();
 

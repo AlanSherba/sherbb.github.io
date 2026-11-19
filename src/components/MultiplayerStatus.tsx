@@ -36,6 +36,14 @@ const Globe = () => (
   </svg>
 );
 
+// A crown on a base, for the chip that shows this browser is crowned
+const CrownIcon = () => (
+  <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor" aria-hidden="true">
+    <path d="M1.5 10.5v-7l3.5 3 3-4.5 3 4.5 3.5-3v7z" />
+    <rect x="1.5" y="12" width="13" height="2" />
+  </svg>
+);
+
 // Shown above the status pill while it's hovered
 const Tutorial = () => (
   <div className="pointer-events-none invisible absolute bottom-full left-8 mb-5 flex w-[25rem] flex-col gap-4 bg-green-500 p-5 text-white opacity-0 transition-opacity duration-150 group-hover:visible group-hover:opacity-100">
@@ -88,7 +96,7 @@ const CHIPS: Chip[] = [
 // opens the multiplayer connection.
 const MultiplayerStatus = () =>
 {
-  const { status } = useMultiplayer();
+  const { status, crowned } = useMultiplayer();
   const connected = status === "connected";
   const [openChip, setOpenChip] = useState<string | null>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -156,6 +164,22 @@ const MultiplayerStatus = () =>
             </button>
           </div>
         ))}
+      {connected && crowned && (
+        // Not a button: it only shows that this browser holds the crown
+        // (claimed with "/claim" in the guest book)
+        <div className={`relative flex ${panelOpen ? "" : "group/chip"}`}>
+          <p aria-hidden="true" className="pointer-events-none invisible absolute bottom-full left-1/2 mb-4 -translate-x-1/2 whitespace-nowrap bg-amber-500 px-5 py-1 font-serif text-3xl text-black opacity-0 transition-opacity duration-150 group-hover/chip:visible group-hover/chip:opacity-100">
+            You have a crown
+          </p>
+          <span
+            className="flex cursor-default items-center bg-amber-500 px-1.5 text-black"
+            role="img"
+            aria-label="You have a crown"
+          >
+            <CrownIcon />
+          </span>
+        </div>
+      )}
       {connected &&
         CHIPS.map(({ id, Panel }) => <Panel key={id} open={openChip === id} />)}
     </div>

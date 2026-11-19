@@ -15,3 +15,11 @@ export const cursorSvg = (fill: string) =>
 // A CSS `cursor` value that draws the triangle as the mouse pointer
 export const cursorCss = (fill: string) =>
   `url("data:image/svg+xml,${encodeURIComponent(cursorSvg(fill))}") ${CURSOR_TIP} ${CURSOR_TIP}, auto`;
+
+// The site owner's crown, gold with the cursor's black outline
+export const CROWN_GOLD = "#facc15";
+
+export const crownSvg = (width: number) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${(width * 15) / 22}" viewBox="0 0 22 15" aria-hidden="true">` +
+  `<path d="M2 13.5V3.5l4.5 4 4.5-6 4.5 6 4.5-4v10z" fill="${CROWN_GOLD}" stroke="black" stroke-width="2" stroke-linejoin="miter"/>` +
+  `</svg>`;
