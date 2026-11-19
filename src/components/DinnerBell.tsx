@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ringBell } from "../multiplayer/connection";
 import { useMultiplayer } from "../multiplayer/store";
+import MessageField from "./MessageField";
 
 // The dinner bell: a visitor rings it (with an optional message) and I get
 // a Discord message, so I can come and meet them on the site. After a ring
@@ -178,33 +179,14 @@ const DinnerBell = ({ open }: DinnerBellProps) =>
           </div>
         </div>
       )}
-      <div className="relative flex">
-        <textarea
-          ref={field}
-          className="h-28 flex-1 resize-none bg-white/15 px-3 pb-6 pt-2 font-mono text-base text-white outline-none placeholder:text-white/60 focus:bg-white/20"
-          placeholder="Message..."
-          maxLength={BELL_MESSAGE_LENGTH}
-          aria-describedby="bell-count"
-          value={message}
-          onChange={(event) => setMessage(event.target.value.slice(0, BELL_MESSAGE_LENGTH))}
-          onKeyDown={(event) =>
-          {
-            // Ctrl+Enter (Cmd+Enter on a Mac) rings
-            if (event.key === "Enter" && (event.ctrlKey || event.metaKey))
-            {
-              event.preventDefault();
-              ring();
-            }
-          }}
-        />
-        {/* Characters used of the limit; full strength once it's reached */}
-        <p
-          id="bell-count"
-          className={`pointer-events-none absolute bottom-1.5 right-3 select-none font-mono text-xs ${message.length >= BELL_MESSAGE_LENGTH ? "font-bold text-white" : "text-white/60"}`}
-        >
-          {message.length}/{BELL_MESSAGE_LENGTH}
-        </p>
-      </div>
+      <MessageField
+        id="bell"
+        value={message}
+        maxLength={BELL_MESSAGE_LENGTH}
+        onChange={setMessage}
+        onSubmit={ring}
+        fieldRef={field}
+      />
       {note && (
         <p className="px-2 font-mono text-sm leading-relaxed" role="status">
           {note}

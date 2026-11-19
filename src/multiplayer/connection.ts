@@ -23,7 +23,8 @@ import {
 //
 // Bandwidth: the tab sends one small message when its page changes, and
 // receives only the per-page reader counts, and only the counts that change
-// (plus the dinner bell's single row, which changes once per ring).
+// (plus the dinner bell's single row, which changes once per ring). The
+// guest book's messages are sent only while it's open.
 // Cursors: the tab sends its cursor at most CURSOR_UPDATES_PER_SECOND times a
 // second (see cursors.ts), only when it moved and only while someone else is
 // on the same page, and receives only the cursors on its own page.
@@ -299,6 +300,72 @@ export const ringBell = async (message: string) =>
   await connection.reducers.ringBell({ message });
 };
 
+// ---- Guest book ----
+
+// Its subscription, while the guest book is open
+let guestSubscription: SubscriptionHandle | null = null;
+
+const showGuestBook = () =>
+{
+  if (!connection || !guestSubscription)
+  {
+    return;
+  }
+  const me = connection.identity?.toHexString();
+  const entries = Array.from(connection.db.recentGuestMessages.iter(), (row) => ({
+    id: row.id,
+    name: row.name,
+    text: row.text,
+    sentAt: Number(row.sentAt.toMillis()),
+    mine: row.sender.toHexString() === me,
+    reported: row.reported,
+  }));
+  entries.sort((a, b) => a.sentAt - b.sentAt || Number(a.id - b.id));
+  updateMultiplayerState({ guestBook: entries });
+};
+
+// Load the guest book's latest messages and keep them up to date until the
+// returned function is called
+export const openGuestBook = () =>
+{
+  if (!connection || guestSubscription)
+  {
+    return () => {};
+  }
+  const subscription = connection
+    .subscriptionBuilder()
+    .onApplied(showGuestBook)
+    .subscribe(["SELECT * FROM recent_guest_messages"]);
+  guestSubscription = subscription;
+  return () =>
+  {
+    guestSubscription = null;
+    if (!subscription.isEnded())
+    {
+      subscription.unsubscribe();
+    }
+    updateMultiplayerState({ guestBook: null });
+  };
+};
+
+const guestReducers = () =>
+{
+  if (!connection || !connected)
+  {
+    throw new Error("Not connected");
+  }
+  return connection.reducers;
+};
+
+export const signGuestBook = async (name: string, text: string) =>
+  guestReducers().signGuestBook({ name, text });
+
+export const deleteGuestMessage = async (id: bigint) =>
+  guestReducers().deleteGuestMessage({ id });
+
+export const reportGuestMessage = async (id: bigint, reported: boolean) =>
+  guestReducers().reportGuestMessage({ id, reported });
+
 const countReaders = (conn: DbConnection) =>
 {
   const readers = new Map(
@@ -349,6 +416,8 @@ const connect = (token: string | undefined) =>
       conn.db.bell.onInsert((_ctx, row) => showBell(row));
       conn.db.bell.onUpdate((_ctx, _old, row) => showBell(row));
       conn.db.bell.onDelete(() => showBell(null));
+      conn.db.recentGuestMessages.onInsert(showGuestBook);
+      conn.db.recentGuestMessages.onDelete(showGuestBook);
       conn
         .subscriptionBuilder()
         .onApplied(recount)

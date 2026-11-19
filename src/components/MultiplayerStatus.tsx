@@ -5,6 +5,7 @@ import {
   useMultiplayer,
 } from "../multiplayer/store";
 import DinnerBell, { BellIcon } from "./DinnerBell";
+import GuestBook, { GuestBookIcon } from "./GuestBook";
 
 const LABELS: Record<Status, string> = {
   connecting: "Connecting",
@@ -72,6 +73,14 @@ const CHIPS: Chip[] = [
     color: "bg-mode-projects",
     icon: <BellIcon />,
     Panel: DinnerBell,
+  },
+  {
+    id: "guest-book",
+    label: "Guest book",
+    tooltip: "Guest book",
+    color: "bg-mode-projects",
+    icon: <GuestBookIcon />,
+    Panel: GuestBook,
   },
 ];
 

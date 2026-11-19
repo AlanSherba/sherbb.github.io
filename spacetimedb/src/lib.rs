@@ -1,6 +1,6 @@
 use spacetimedb::http::{Request, Timeout};
 use spacetimedb::{
-    ConnectionId, Identity, ProcedureContext, ReducerContext, ScheduleAt, Table, TimeDuration,
+    AnonymousViewContext, ConnectionId, Identity, ProcedureContext, ReducerContext, ScheduleAt, Table, TimeDuration,
     Timestamp,
 };
 use std::time::Duration;
@@ -31,6 +31,9 @@ pub struct Env {
     // Discord user ID (a number, not a username) to @mention in each ring,
     // so it notifies them
     pub DISCORD_PING_USER_ID: Option<String>,
+    // Discord webhook new guest book messages are posted to. While unset,
+    // messages are kept but not posted.
+    pub DISCORD_GUEST_BOOK_WEBHOOK_URL: Option<String>,
 }
 
 // Longest location a client may report. Locations are short keys like
@@ -425,25 +428,24 @@ fn owner_asleep(now: Timestamp) -> bool {
     !(WAKE_HOUR..BEDTIME_HOUR).contains(&hour)
 }
 
-// Post a ring to Discord. A procedure, since reducers can't make requests.
-#[spacetimedb::procedure]
-pub fn send_bell(ctx: &mut ProcedureContext, ring: BellRing) {
-    let Some(url) = ctx.env.DISCORD_WEBHOOK_URL() else {
-        log::warn!("Dinner bell rung, but DISCORD_WEBHOOK_URL is not set");
+// Post a message to a Discord webhook, @mentioning `ping` (a Discord user
+// ID) if given. Nothing a visitor types can ping anyone (@everyone, roles,
+// users): only `ping` may be mentioned.
+fn post_to_discord(
+    ctx: &mut ProcedureContext,
+    what: &str,
+    url: Option<String>,
+    content: String,
+    ping: Option<String>,
+) {
+    let Some(url) = url else {
+        log::warn!("{what}: no webhook URL is set, so nothing was sent");
         return;
     };
-    // Ping the owner, if set and they're awake. Nothing a visitor types can
-    // ping anyone (@everyone, roles, users): only this one user may be
-    // mentioned.
-    let ping = ctx
-        .env
-        .DISCORD_PING_USER_ID()
-        .filter(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
-        .filter(|_| !owner_asleep(ctx.timestamp));
-    let mut content = bell_text(&ring);
-    if let Some(id) = &ping {
-        content = format!("<@{id}> {content}");
-    }
+    let content = match &ping {
+        Some(id) => format!("<@{id}> {content}"),
+        None => content,
+    };
     let body = serde_json::json!({
         "content": content,
         "allowed_mentions": { "parse": [], "users": ping.into_iter().collect::<Vec<_>>() },
@@ -458,15 +460,175 @@ pub fn send_bell(ctx: &mut ProcedureContext, ring: BellRing) {
     {
         Ok(request) => request,
         Err(error) => {
-            log::error!("Dinner bell: bad webhook URL: {error}");
+            log::error!("{what}: bad webhook URL: {error}");
             return;
         }
     };
     match ctx.http.send(request) {
-        Ok(response) if response.status().is_success() => log::info!("Dinner bell sent"),
-        Ok(response) => log::error!("Dinner bell: Discord answered {}", response.status()),
-        Err(error) => log::error!("Dinner bell: request failed: {error}"),
+        Ok(response) if response.status().is_success() => log::info!("{what} sent"),
+        Ok(response) => log::error!("{what}: Discord answered {}", response.status()),
+        Err(error) => log::error!("{what}: request failed: {error}"),
     }
+}
+
+// Post a ring to Discord. A procedure, since reducers can't make requests.
+#[spacetimedb::procedure]
+pub fn send_bell(ctx: &mut ProcedureContext, ring: BellRing) {
+    // Ping the owner, if set and they're awake
+    let ping = ctx
+        .env
+        .DISCORD_PING_USER_ID()
+        .filter(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
+        .filter(|_| !owner_asleep(ctx.timestamp));
+    let url = ctx.env.DISCORD_WEBHOOK_URL();
+    post_to_discord(ctx, "Dinner bell", url, bell_text(&ring), ping);
+}
+
+// ---- Guest book ----
+//
+// Visitors leave public messages. Anyone can delete their own messages, and
+// anyone can report someone else's message, which hides it behind a
+// "Censored" cover for everyone until anyone un-reports it. The owner
+// deletes messages with SQL:
+//   spacetime sql sherbb-site "DELETE FROM guest_message WHERE id = 12"
+// Each new message is also posted to Discord (its own webhook, set with
+// DISCORD_GUEST_BOOK_WEBHOOK_URL like DISCORD_WEBHOOK_URL), without a ping.
+
+const MAX_GUEST_NAME_CHARS: usize = 24;
+const MAX_GUEST_MESSAGE_CHARS: usize = 240;
+// How long a visitor waits between messages
+const GUEST_COOLDOWN: Duration = Duration::from_secs(30);
+// How many of the latest messages clients see (see recent_guest_messages)
+const GUEST_BOOK_PAGE: usize = 100;
+
+// Every message. Private: clients read the latest ones through
+// recent_guest_messages, and only while the guest book is open.
+#[spacetimedb::table(accessor = guest_message)]
+pub struct GuestMessage {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    // Who wrote it; only they can delete it
+    #[index(btree)]
+    pub sender: Identity,
+    pub name: String,
+    pub text: String,
+    #[index(btree)]
+    pub sent_at: Timestamp,
+    // Hidden behind a cover until un-reported
+    pub reported: bool,
+}
+
+// The latest GUEST_BOOK_PAGE messages, oldest first
+#[spacetimedb::view(accessor = recent_guest_messages, public)]
+fn recent_guest_messages(ctx: &AnonymousViewContext) -> Vec<GuestMessage> {
+    let mut messages: Vec<GuestMessage> = ctx
+        .db
+        .guest_message()
+        .sent_at()
+        .filter(Timestamp::UNIX_EPOCH..)
+        .collect();
+    let skip = messages.len().saturating_sub(GUEST_BOOK_PAGE);
+    messages.drain(..skip);
+    messages
+}
+
+// A new message waiting to be posted to Discord, like BellRing
+#[spacetimedb::table(accessor = guest_post, scheduled(send_guest_post))]
+pub struct GuestPost {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub name: String,
+    pub text: String,
+}
+
+#[spacetimedb::reducer]
+pub fn sign_guest_book(ctx: &ReducerContext, name: String, text: String) -> Result<(), String> {
+    // Names are one line
+    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    let text = text.trim().to_string();
+    if name.chars().count() > MAX_GUEST_NAME_CHARS {
+        return Err("Name too long".into());
+    }
+    if text.is_empty() {
+        return Err("Write a message first".into());
+    }
+    if text.chars().count() > MAX_GUEST_MESSAGE_CHARS {
+        return Err("Message too long".into());
+    }
+    let ready = ctx
+        .db
+        .guest_message()
+        .sender()
+        .filter(&ctx.sender())
+        .all(|message| message.sent_at + TimeDuration::from(GUEST_COOLDOWN) <= ctx.timestamp);
+    if !ready {
+        return Err("You just signed the guest book. Try again in a moment.".into());
+    }
+    let name = if name.is_empty() { "Anonymous".to_string() } else { name };
+    ctx.db.guest_message().insert(GuestMessage {
+        id: 0,
+        sender: ctx.sender(),
+        name: name.clone(),
+        text: text.clone(),
+        sent_at: ctx.timestamp,
+        reported: false,
+    });
+    ctx.db.guest_post().insert(GuestPost {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Time(ctx.timestamp),
+        name,
+        text,
+    });
+    Ok(())
+}
+
+// Delete one of your own messages
+#[spacetimedb::reducer]
+pub fn delete_guest_message(ctx: &ReducerContext, id: u64) -> Result<(), String> {
+    let message = ctx.db.guest_message().id().find(id).ok_or("No such message")?;
+    if message.sender != ctx.sender() {
+        return Err("You can only delete your own messages".into());
+    }
+    ctx.db.guest_message().id().delete(id);
+    Ok(())
+}
+
+// Report someone else's message (hiding it), or un-report it
+#[spacetimedb::reducer]
+pub fn report_guest_message(ctx: &ReducerContext, id: u64, reported: bool) -> Result<(), String> {
+    let message = ctx.db.guest_message().id().find(id).ok_or("No such message")?;
+    if message.sender == ctx.sender() {
+        return Err("You can't report your own message".into());
+    }
+    if message.reported != reported {
+        ctx.db.guest_message().id().update(GuestMessage { reported, ..message });
+    }
+    Ok(())
+}
+
+// The Discord message for a guest book message
+fn guest_post_text(post: &GuestPost) -> String {
+    // The name is shown in bold, so drop anything Discord would format
+    let name: String = post
+        .name
+        .chars()
+        .filter(|c| !"*_~`|<>[]()\\#@:".contains(*c))
+        .collect();
+    let mut text = format!("\u{1F4D6} **{name}** signed the guest book");
+    for line in post.text.lines() {
+        text += "\n> ";
+        text += line;
+    }
+    text
+}
+
+#[spacetimedb::procedure]
+pub fn send_guest_post(ctx: &mut ProcedureContext, post: GuestPost) {
+    let url = ctx.env.DISCORD_GUEST_BOOK_WEBHOOK_URL();
+    post_to_discord(ctx, "Guest book message", url, guest_post_text(&post), None);
 }
 
 #[cfg(test)]

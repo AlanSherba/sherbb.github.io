@@ -20,6 +20,9 @@ export interface MultiplayerState {
   confirmedLocation: string;
   // The dinner bell's last ring, or null if it was never rung
   bell: BellState | null;
+  // The guest book's latest messages, oldest first, while it's open; null
+  // while it's closed or loading
+  guestBook: GuestEntry[] | null;
 }
 
 // Times in milliseconds since the Unix epoch, by the server's clock
@@ -29,12 +32,25 @@ export interface BellState {
   readyAt: number;
 }
 
+export interface GuestEntry {
+  id: bigint;
+  name: string;
+  text: string;
+  // Milliseconds since the Unix epoch
+  sentAt: number;
+  // Written by this visitor (so they can delete it, and not report it)
+  mine: boolean;
+  // Reported, so hidden behind a cover until revealed
+  reported: boolean;
+}
+
 let state: MultiplayerState = {
   status: "connecting",
   readers: new Map(),
   location: "",
   confirmedLocation: "",
   bell: null,
+  guestBook: null,
 };
 const listeners = new Set<() => void>();
 

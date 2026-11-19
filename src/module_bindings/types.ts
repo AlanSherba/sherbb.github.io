@@ -43,6 +43,24 @@ export const Cursor = __t.object("Cursor", {
 });
 export type Cursor = __Infer<typeof Cursor>;
 
+export const GuestMessage = __t.object("GuestMessage", {
+  id: __t.u64(),
+  sender: __t.identity(),
+  name: __t.string(),
+  text: __t.string(),
+  sentAt: __t.timestamp(),
+  reported: __t.bool(),
+});
+export type GuestMessage = __Infer<typeof GuestMessage>;
+
+export const GuestPost = __t.object("GuestPost", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  name: __t.string(),
+  text: __t.string(),
+});
+export type GuestPost = __Infer<typeof GuestPost>;
+
 export const Online = __t.object("Online", {
   connectionId: __t.connectionId(),
   identity: __t.identity(),

@@ -35,10 +35,13 @@ import {
 
 // Import all reducer arg schemas
 import CloseChatReducer from "./close_chat_reducer";
+import DeleteGuestMessageReducer from "./delete_guest_message_reducer";
 import MoveCursorReducer from "./move_cursor_reducer";
+import ReportGuestMessageReducer from "./report_guest_message_reducer";
 import RingBellReducer from "./ring_bell_reducer";
 import SetChatReducer from "./set_chat_reducer";
 import SetLocationReducer from "./set_location_reducer";
+import SignGuestBookReducer from "./sign_guest_book_reducer";
 
 // Import all procedure arg schemas
 
@@ -47,6 +50,7 @@ import BellRow from "./bell_table";
 import ChatRow from "./chat_table";
 import CursorRow from "./cursor_table";
 import PageReadersRow from "./page_readers_table";
+import RecentGuestMessagesRow from "./recent_guest_messages_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -102,15 +106,25 @@ const tablesSchema = __schema({
       { name: 'page_readers_location_key', constraint: 'unique', columns: ['location'] },
     ],
   }, PageReadersRow),
+  recentGuestMessages: __table({
+    name: 'recent_guest_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, RecentGuestMessagesRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("close_chat", CloseChatReducer),
+  __reducerSchema("delete_guest_message", DeleteGuestMessageReducer),
   __reducerSchema("move_cursor", MoveCursorReducer),
+  __reducerSchema("report_guest_message", ReportGuestMessageReducer),
   __reducerSchema("ring_bell", RingBellReducer),
   __reducerSchema("set_chat", SetChatReducer),
   __reducerSchema("set_location", SetLocationReducer),
+  __reducerSchema("sign_guest_book", SignGuestBookReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -121,6 +135,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
   tables: typeof tablesSchema.schemaType.tables & {
     /** @deprecated Use `pageReaders` instead. This alias will be removed in the next major version. */
     readonly "page_readers": Omit<typeof tablesSchema.schemaType.tables["pageReaders"], "accessorName"> & { readonly accessorName: "page_readers" };
+    /** @deprecated Use `recentGuestMessages` instead. This alias will be removed in the next major version. */
+    readonly "recent_guest_messages": Omit<typeof tablesSchema.schemaType.tables["recentGuestMessages"], "accessorName"> & { readonly accessorName: "recent_guest_messages" };
   };
 };
 
@@ -140,6 +156,7 @@ const REMOTE_MODULE = {
 
 const tableAccessorAliases = {
   "page_readers": "pageReaders",
+  "recent_guest_messages": "recentGuestMessages",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -164,6 +181,8 @@ type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
   /** @deprecated Use `pageReaders` instead. This alias will be removed in the next major version. */
   readonly "page_readers": __TablesBase["pageReaders"];
+  /** @deprecated Use `recentGuestMessages` instead. This alias will be removed in the next major version. */
+  readonly "recent_guest_messages": __TablesBase["recentGuestMessages"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */
