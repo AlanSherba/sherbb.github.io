@@ -31,7 +31,9 @@ const ContentList = ({
 }: ContentListProps) => (
   // The extra left padding (offset by the negative margin) leaves room for
   // the reader counts beside each title
-  <nav className="-ml-5 min-h-0 flex-1 overflow-y-auto pb-16 pl-10 pr-8">
+  <nav
+    data-cursor-panel="list"
+    className="-ml-5 min-h-0 flex-1 overflow-y-auto pb-16 pl-10 pr-8">
     {entries.length === 0 && emptyText && (
       <p className="select-none py-1 font-mono text-neutral-600">
         {emptyText}

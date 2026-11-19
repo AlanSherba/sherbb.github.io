@@ -111,3 +111,9 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background-color: #ffffff59;
 }
+/* The desktop site uses the multiplayer cursor shape for the local pointer
+   too, everywhere (links included), so it matches what others see. */
+[data-custom-cursor],
+[data-custom-cursor] * {
+  cursor: var(--local-cursor) !important;
+}

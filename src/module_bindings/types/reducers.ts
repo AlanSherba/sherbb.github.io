@@ -6,7 +6,9 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import MoveCursorReducer from "../move_cursor_reducer";
 import SetLocationReducer from "../set_location_reducer";
 
+export type MoveCursorParams = __Infer<typeof MoveCursorReducer>;
 export type SetLocationParams = __Infer<typeof SetLocationReducer>;
 

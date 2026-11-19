@@ -19,6 +19,7 @@ import
   resolveMediaUrl,
 } from "./MarkdownFiles";
 import { ProjectData, loadProjects, projectCategories } from "./Projects";
+import { cursorCss } from "./multiplayer/cursorShape";
 import
 {
   otherReaders,
@@ -31,7 +32,11 @@ import { useSearchParams } from "react-router-dom";
 
 // Loaded separately so the SpacetimeDB client stays out of the main bundle
 // (and off mobile, which never renders App).
-const MultiplayerStatus = lazy(() => import("./components/MultiplayerStatus"));
+const MultiplayerLayer = lazy(() => import("./multiplayer/MultiplayerLayer"));
+
+// This visitor's own pointer uses the multiplayer cursor shape (see
+// [data-custom-cursor] in index.css)
+const localCursor = { "--local-cursor": cursorCss("white") } as React.CSSProperties;
 
 const prefetchedImages: HTMLImageElement[] = [];
 
@@ -215,7 +220,10 @@ function App()
   {
     return (
       <header className="mx-auto flex w-full max-w-[1264px] flex-row items-baseline gap-8 pb-6 pl-[5.25rem] pr-16 pt-12">
-        <h1 className="whitespace-nowrap font-serif text-4xl italic text-white">
+        <h1
+          data-cursor-origin
+          className="whitespace-nowrap font-serif text-4xl italic text-white"
+        >
           Alan Sherba
         </h1>
         {/* Roles */}
@@ -300,7 +308,11 @@ function App()
   const Blog = () =>
   {
     return (
-      <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
+      <main
+        ref={descriptionRef}
+        data-cursor-panel="details"
+        className="flex-1 overflow-y-auto pb-16 pr-12"
+      >
         {selectedPost ? (
           <BlogPostView
             post={selectedPost}
@@ -326,10 +338,14 @@ function App()
   {
     if (!selectedProject)
     {
-      return <main className="flex-1" />;
+      return <main data-cursor-panel="details" className="flex-1" />;
     }
     return (
-      <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
+      <main
+        ref={descriptionRef}
+        data-cursor-panel="details"
+        className="flex-1 overflow-y-auto pb-16 pr-12"
+      >
         <div className="flex max-w-3xl flex-col gap-6">
           <PageTitle
             title={selectedProject.title}
@@ -344,6 +360,8 @@ function App()
   return (
     <div
       data-mode={mode}
+      data-custom-cursor
+      style={localCursor}
       className="absolute inset-0 flex flex-col overflow-hidden bg-black font-mono text-white"
     >
       {Header()}
@@ -352,7 +370,7 @@ function App()
         {mode === "projects" ? Description() : Blog()}
       </div>
       <Suspense fallback={null}>
-        <MultiplayerStatus />
+        <MultiplayerLayer />
       </Suspense>
     </div>
   );

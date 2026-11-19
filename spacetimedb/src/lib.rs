@@ -1,5 +1,11 @@
 use spacetimedb::{ConnectionId, Identity, ReducerContext, Table, Timestamp};
 
+// Cursor panels (see Cursor::panel)
+const PANEL_HIDDEN: u8 = 255;
+const PANEL_MAX: u8 = 2;
+// Cursor coordinates are pixels; anything beyond this is junk
+const MAX_COORD: f32 = 100_000.0;
+
 // Longest location a client may report. Locations are short keys like
 // "projects/Gridform" or "blog/markdown-test".
 const MAX_LOCATION_LEN: usize = 128;
@@ -28,6 +34,34 @@ pub struct PageReaders {
     #[primary_key]
     pub location: String,
     pub readers: u32,
+}
+
+// One row per tab that is sharing its cursor. A tab only sends cursor
+// moves while someone else is on its page, and its row is removed when it
+// changes page or disconnects. Clients subscribe to the rows for their own
+// page: SELECT * FROM cursor WHERE page = <page_id(location)>.
+#[spacetimedb::table(accessor = cursor, public)]
+pub struct Cursor {
+    #[primary_key]
+    pub connection_id: ConnectionId,
+    // page_id of the page the cursor is on. A number rather than the
+    // location text keeps every cursor update small.
+    #[index(btree)]
+    pub page: u32,
+    pub x: f32,
+    pub y: f32,
+    // What x and y are relative to: 0 = the page (top left of the content,
+    // above the name), 1 = the scrolled list of pages, 2 = the scrolled page
+    // details. 255 = hidden (pointer left the window).
+    pub panel: u8,
+}
+
+// 32-bit FNV-1a hash of a location. The client computes the same hash to
+// subscribe to its page's cursors.
+pub fn page_id(location: &str) -> u32 {
+    location.bytes().fold(0x811c_9dc5u32, |hash, byte| {
+        (hash ^ byte as u32).wrapping_mul(0x0100_0193)
+    })
 }
 
 fn enter(ctx: &ReducerContext, location: &str) {
@@ -74,6 +108,7 @@ fn remove_connection(ctx: &ReducerContext, connection_id: ConnectionId) {
         leave(ctx, &row.location);
         ctx.db.online().connection_id().delete(connection_id);
     }
+    ctx.db.cursor().connection_id().delete(connection_id);
 }
 
 #[spacetimedb::reducer(client_connected)]
@@ -112,7 +147,42 @@ pub fn set_location(ctx: &ReducerContext, location: String) -> Result<(), String
     if row.location != location {
         leave(ctx, &row.location);
         enter(ctx, &location);
+        // The cursor belonged to the old page
+        ctx.db.cursor().connection_id().delete(connection_id);
         ctx.db.online().connection_id().update(Online { location, ..row });
+    }
+    Ok(())
+}
+
+// Share this tab's cursor with others on its page. Clients send this a few
+// times a second, only while the cursor moves and someone else is reading
+// the same page.
+#[spacetimedb::reducer]
+pub fn move_cursor(ctx: &ReducerContext, x: f32, y: f32, panel: u8) -> Result<(), String> {
+    if !(x.is_finite() && y.is_finite() && x.abs() <= MAX_COORD && y.abs() <= MAX_COORD) {
+        return Err("bad position".into());
+    }
+    if panel > PANEL_MAX && panel != PANEL_HIDDEN {
+        return Err("bad panel".into());
+    }
+    let connection_id = ctx.connection_id().ok_or("no connection")?;
+    let Some(row) = ctx.db.online().connection_id().find(connection_id) else {
+        return Err("not connected".into());
+    };
+    if row.location.is_empty() {
+        return Ok(());
+    }
+    let cursor = Cursor {
+        connection_id,
+        page: page_id(&row.location),
+        x,
+        y,
+        panel,
+    };
+    if ctx.db.cursor().connection_id().find(connection_id).is_some() {
+        ctx.db.cursor().connection_id().update(cursor);
+    } else {
+        ctx.db.cursor().insert(cursor);
     }
     Ok(())
 }

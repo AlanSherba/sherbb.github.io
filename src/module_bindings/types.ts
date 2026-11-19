@@ -10,6 +10,15 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Cursor = __t.object("Cursor", {
+  connectionId: __t.connectionId(),
+  page: __t.u32(),
+  x: __t.f32(),
+  y: __t.f32(),
+  panel: __t.u8(),
+});
+export type Cursor = __Infer<typeof Cursor>;
+
 export const Online = __t.object("Online", {
   connectionId: __t.connectionId(),
   identity: __t.identity(),

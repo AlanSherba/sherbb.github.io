@@ -1,6 +1,15 @@
-import { DbConnection } from "../module_bindings";
+import { DbConnection, SubscriptionHandle } from "../module_bindings";
+import { Cursor as CursorRow } from "../module_bindings/types";
+import {
+  CURSOR_UPDATES_PER_SECOND,
+  clearCursors,
+  removeCursor,
+  updateCursor,
+} from "./cursors";
+import { CursorTransform, PANEL_HIDDEN, transformAt } from "./panels";
 import {
   getMultiplayerState,
+  otherReaders,
   subscribeMultiplayer,
   updateMultiplayerState,
 } from "./store";
@@ -11,6 +20,9 @@ import {
 //
 // Bandwidth: the tab sends one small message when its page changes, and
 // receives only the per-page reader counts, and only the counts that change.
+// Cursors: the tab sends its cursor at most CURSOR_UPDATES_PER_SECOND times a
+// second (see cursors.ts), only when it moved and only while someone else is
+// on the same page, and receives only the cursors on its own page.
 
 const HOST = "https://maincloud.spacetimedb.com";
 const DATABASE = "sherbb-site";
@@ -76,6 +88,133 @@ const syncLocation = () =>
     .catch((error) => console.warn("Multiplayer location failed:", error));
 };
 
+// 32-bit FNV-1a hash of a location; matches page_id() in the module
+const pageId = (location: string): number =>
+{
+  const bytes = new TextEncoder().encode(location);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++)
+  {
+    hash = Math.imul(hash ^ bytes[i], 0x01000193);
+  }
+  return hash >>> 0;
+};
+
+// ---- Receiving cursors ----
+
+// The page whose cursors are subscribed, and the subscription
+let cursorPage: number | null = null;
+let cursorSubscription: SubscriptionHandle | null = null;
+
+// Subscribe to the cursors on this tab's page, replacing the previous page's
+// subscription once the new one is in place
+const syncCursorSubscription = () =>
+{
+  const { confirmedLocation } = getMultiplayerState();
+  if (!connection || !connected || !confirmedLocation)
+  {
+    return;
+  }
+  const page = pageId(confirmedLocation);
+  if (page === cursorPage)
+  {
+    return;
+  }
+  cursorPage = page;
+  clearCursors();
+  const previous = cursorSubscription;
+  cursorSubscription = connection
+    .subscriptionBuilder()
+    .onApplied(() =>
+    {
+      if (previous && !previous.isEnded())
+      {
+        previous.unsubscribe();
+      }
+    })
+    .subscribe(`SELECT * FROM cursor WHERE page = ${page}`);
+};
+
+const showCursor = (row: CursorRow) =>
+{
+  const id = row.connectionId.toHexString();
+  // Skip this tab's own cursor, and rows from a page just left
+  if (id === connection?.connectionId.toHexString() || row.page !== cursorPage)
+  {
+    return;
+  }
+  updateCursor(id, row.panel, { x: row.x, y: row.y });
+};
+
+const hideCursor = (row: CursorRow) => removeCursor(row.connectionId.toHexString());
+
+// ---- Sending this tab's cursor ----
+
+
+// The pointer in screen coordinates, or null when it's outside the window
+let pointer: { x: number; y: number } | null = null;
+// The last cursor sent, and the page it was sent on
+let sentCursor: CursorTransform | null = null;
+let sentCursorLocation = "";
+
+const sendCursor = () =>
+{
+  const state = getMultiplayerState();
+  const location = state.confirmedLocation;
+  // Alone on the page (or nowhere yet): send nothing. Forgetting the last
+  // send means the cursor is sent again as soon as someone arrives.
+  if (!connection || !connected || !location || otherReaders(state, location) === 0)
+  {
+    sentCursor = null;
+    return;
+  }
+  if (location !== sentCursorLocation)
+  {
+    // The server drops the cursor when the page changes
+    sentCursor = null;
+    sentCursorLocation = location;
+  }
+  const next: CursorTransform = pointer
+    ? transformAt(pointer.x, pointer.y)
+    : { x: 0, y: 0, panel: PANEL_HIDDEN };
+  next.x = Math.round(next.x);
+  next.y = Math.round(next.y);
+  if (sentCursor
+    ? sentCursor.x === next.x && sentCursor.y === next.y && sentCursor.panel === next.panel
+    : next.panel === PANEL_HIDDEN)
+  {
+    return;
+  }
+  sentCursor = next;
+  connection.reducers.moveCursor(next).catch(() =>
+  {
+    // Dropped (for example while reconnecting); the next move resends
+    sentCursor = null;
+  });
+};
+
+const trackPointer = () =>
+{
+  window.addEventListener("pointermove", (event) =>
+  {
+    pointer = { x: event.clientX, y: event.clientY };
+  });
+  document.documentElement.addEventListener("pointerleave", () =>
+  {
+    pointer = null;
+  });
+  document.addEventListener("visibilitychange", () =>
+  {
+    if (document.hidden)
+    {
+      pointer = null;
+    }
+  });
+  // At most this many sends a second; other tabs smooth the motion between
+  // them (see cursors.ts)
+  window.setInterval(sendCursor, 1000 / CURSOR_UPDATES_PER_SECOND);
+};
+
 const countReaders = (conn: DbConnection) =>
 {
   const readers = new Map(
@@ -90,6 +229,7 @@ const onConnected = (conn: DbConnection) =>
 {
   connected = true;
   sentLocation = "";
+  sentCursor = null;
   updateMultiplayerState({ status: "connected", confirmedLocation: "" });
   syncLocation();
 };
@@ -115,6 +255,9 @@ const connect = (token: string | undefined) =>
       conn.db.pageReaders.onInsert(recount);
       conn.db.pageReaders.onDelete(recount);
       conn.db.pageReaders.onUpdate(recount);
+      conn.db.cursor.onInsert((_ctx, row) => showCursor(row));
+      conn.db.cursor.onUpdate((_ctx, _old, row) => showCursor(row));
+      conn.db.cursor.onDelete((_ctx, row) => hideCursor(row));
       conn
         .subscriptionBuilder()
         .onApplied(recount)
@@ -151,6 +294,8 @@ export const startMultiplayer = () =>
   if (!connection)
   {
     subscribeMultiplayer(syncLocation);
+    subscribeMultiplayer(syncCursorSubscription);
+    trackPointer();
     connect(readToken());
   }
 };
