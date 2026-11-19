@@ -1,9 +1,9 @@
 {
   "files": {
-    "main.css": "/static/css/main.ead7ae32.css",
-    "main.js": "/static/js/main.8bcf736c.js",
-    "static/js/445.c6e76054.chunk.js": "/static/js/445.c6e76054.chunk.js",
-    "static/js/157.24bfde46.chunk.js": "/static/js/157.24bfde46.chunk.js",
+    "main.css": "/static/css/main.3e57bb2b.css",
+    "main.js": "/static/js/main.c249a3af.js",
+    "static/js/429.09198655.chunk.js": "/static/js/429.09198655.chunk.js",
+    "static/js/157.5f23440b.chunk.js": "/static/js/157.5f23440b.chunk.js",
     "static/media/markdown-test.md": "/static/media/markdown-test.03d169a396b0a40d462f.md",
     "static/media/01-animal-company.md": "/static/media/01-animal-company.892932de9bc3fb8e42fe.md",
     "static/media/02-gridform.md": "/static/media/02-gridform.96e17fc50905267a9994.md",
@@ -18,13 +18,13 @@
     "static/media/10-this-website.md": "/static/media/10-this-website.6a2474de0e34d8b7a2f5.md",
     "static/media/12-music.md": "/static/media/12-music.4ba254bb4febfcd9dceb.md",
     "static/media/09-less3.md": "/static/media/09-less3.796230091b6a455e448b.md",
-    "main.ead7ae32.css.map": "/static/css/main.ead7ae32.css.map",
-    "main.8bcf736c.js.map": "/static/js/main.8bcf736c.js.map",
-    "445.c6e76054.chunk.js.map": "/static/js/445.c6e76054.chunk.js.map",
-    "157.24bfde46.chunk.js.map": "/static/js/157.24bfde46.chunk.js.map"
+    "main.3e57bb2b.css.map": "/static/css/main.3e57bb2b.css.map",
+    "main.c249a3af.js.map": "/static/js/main.c249a3af.js.map",
+    "429.09198655.chunk.js.map": "/static/js/429.09198655.chunk.js.map",
+    "157.5f23440b.chunk.js.map": "/static/js/157.5f23440b.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.ead7ae32.css",
-    "static/js/main.8bcf736c.js"
+    "static/css/main.3e57bb2b.css",
+    "static/js/main.c249a3af.js"
   ]
 }
