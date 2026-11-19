@@ -1,4 +1,9 @@
-use spacetimedb::{ConnectionId, Identity, ReducerContext, Table, Timestamp};
+use spacetimedb::http::{Request, Timeout};
+use spacetimedb::{
+    ConnectionId, Identity, ProcedureContext, ReducerContext, ScheduleAt, Table, TimeDuration,
+    Timestamp,
+};
+use std::time::Duration;
 
 // Cursor panels (see Cursor::panel)
 const PANEL_HIDDEN: u8 = 255;
@@ -8,6 +13,25 @@ const MAX_COORD: f32 = 100_000.0;
 
 // Longest chat text, in bytes (the client limits it to 120 characters)
 const MAX_CHAT_LEN: usize = 480;
+
+// Dinner bell: longest message, in characters, and how long after a ring
+// before anyone can ring again
+const MAX_BELL_CHARS: usize = 240;
+const BELL_COOLDOWN: Duration = Duration::from_secs(5 * 60);
+
+// Settings supplied when the module is published, never stored in the
+// (public) source. Set with:
+//   DISCORD_WEBHOOK_URL=... spacetime publish sherbb-site --env-only --yes
+#[allow(non_snake_case)]
+#[spacetimedb::env]
+pub struct Env {
+    // Discord webhook the dinner bell posts to. While unset, rings are
+    // accepted but nothing is sent.
+    pub DISCORD_WEBHOOK_URL: Option<String>,
+    // Discord user ID (a number, not a username) to @mention in each ring,
+    // so it notifies them
+    pub DISCORD_PING_USER_ID: Option<String>,
+}
 
 // Longest location a client may report. Locations are short keys like
 // "projects/Gridform" or "blog/markdown-test".
@@ -244,4 +268,244 @@ pub fn close_chat(ctx: &ReducerContext) -> Result<(), String> {
     let connection_id = ctx.connection_id().ok_or("no connection")?;
     ctx.db.chat().connection_id().delete(connection_id);
     Ok(())
+}
+
+// ---- Dinner bell ----
+//
+// A visitor rings the bell (with an optional message) and the site owner
+// gets a Discord message, so they can come and meet the visitor on the site.
+// One ring per BELL_COOLDOWN across all visitors keeps it from being spammed.
+
+// When the bell was last rung and when it can next be rung. A single row
+// (id 0), absent until the first ring. Public so every visitor can show the
+// cooldown.
+#[spacetimedb::table(accessor = bell, public)]
+pub struct Bell {
+    #[primary_key]
+    pub id: u8,
+    pub rung_at: Timestamp,
+    pub ready_at: Timestamp,
+}
+
+// A ring waiting to be sent to Discord. Each row runs send_bell once, right
+// away, and is then deleted. Private: the message never goes to clients.
+#[spacetimedb::table(accessor = bell_ring, scheduled(send_bell))]
+pub struct BellRing {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
+    pub message: String,
+    // The page the visitor was reading, and how many were reading it
+    pub location: String,
+    pub readers: u32,
+}
+
+#[spacetimedb::reducer]
+pub fn ring_bell(ctx: &ReducerContext, message: String) -> Result<(), String> {
+    let message = message.trim().to_string();
+    if message.chars().count() > MAX_BELL_CHARS {
+        return Err("Message too long".into());
+    }
+    let connection_id = ctx.connection_id().ok_or("no connection")?;
+    let online = ctx
+        .db
+        .online()
+        .connection_id()
+        .find(connection_id)
+        .ok_or("not connected")?;
+    let bell = ctx.db.bell().id().find(0);
+    if let Some(bell) = &bell {
+        if bell.ready_at > ctx.timestamp {
+            return Err("The bell was rung recently".into());
+        }
+    }
+    let row = Bell {
+        id: 0,
+        rung_at: ctx.timestamp,
+        ready_at: ctx.timestamp + TimeDuration::from(BELL_COOLDOWN),
+    };
+    if bell.is_some() {
+        ctx.db.bell().id().update(row);
+    } else {
+        ctx.db.bell().insert(row);
+    }
+    let readers = ctx
+        .db
+        .page_readers()
+        .location()
+        .find(online.location.clone())
+        .map_or(0, |page| page.readers);
+    ctx.db.bell_ring().insert(BellRing {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Time(ctx.timestamp),
+        message,
+        location: online.location,
+        readers,
+    });
+    Ok(())
+}
+
+// The Discord message for a ring
+fn bell_text(ring: &BellRing) -> String {
+    let page = if ring.location.is_empty() {
+        "the site"
+    } else {
+        &ring.location
+    };
+    let mut text = format!("\u{1F514} **Dinner bell!** Someone is reading `{page}`");
+    let others = ring.readers.saturating_sub(1);
+    if others > 0 {
+        let plural = if others == 1 { "" } else { "s" };
+        text += &format!(" ({others} other{plural} there too)");
+    }
+    for line in ring.message.lines() {
+        text += "\n> ";
+        text += line;
+    }
+    text
+}
+
+// ---- The owner's bedtime ----
+//
+// The owner lives on Central European Time and sleeps from 20:00 to 08:00
+// there. Rings during that time are still sent, but without the @mention, so
+// they don't wake anyone. The site shows visitors the same hours (see
+// DinnerBell.tsx).
+
+const BEDTIME_HOUR: i64 = 20;
+const WAKE_HOUR: i64 = 8;
+
+// Days since 1970-01-01 of a date (proleptic Gregorian)
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let day_of_year = (153 * ((month + 9) % 12) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+// The year containing a day (days since 1970-01-01)
+fn year_from_days(days: i64) -> i64 {
+    let days = days + 719_468;
+    let era = days.div_euclid(146_097);
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153; // 0 = March
+    year_of_era + era * 400 + if month_index >= 10 { 1 } else { 0 }
+}
+
+// Last Sunday of a 31-day month, as days since 1970-01-01
+fn last_sunday(year: i64, month: i64) -> i64 {
+    let last = days_from_civil(year, month, 31);
+    // 1970-01-01 was a Thursday
+    last - (last + 4).rem_euclid(7)
+}
+
+// The hour (0-23) in Central European Time: UTC+1, or UTC+2 (summer time)
+// from 01:00 UTC on the last Sunday of March to 01:00 UTC on the last Sunday
+// of October
+fn central_european_hour(seconds_since_epoch: i64) -> i64 {
+    let year = year_from_days(seconds_since_epoch.div_euclid(86_400));
+    let summer_start = last_sunday(year, 3) * 86_400 + 3600;
+    let summer_end = last_sunday(year, 10) * 86_400 + 3600;
+    let offset_hours = if (summer_start..summer_end).contains(&seconds_since_epoch) {
+        2
+    } else {
+        1
+    };
+    (seconds_since_epoch + offset_hours * 3600).rem_euclid(86_400) / 3600
+}
+
+fn owner_asleep(now: Timestamp) -> bool {
+    let hour = central_european_hour(now.to_micros_since_unix_epoch().div_euclid(1_000_000));
+    !(WAKE_HOUR..BEDTIME_HOUR).contains(&hour)
+}
+
+// Post a ring to Discord. A procedure, since reducers can't make requests.
+#[spacetimedb::procedure]
+pub fn send_bell(ctx: &mut ProcedureContext, ring: BellRing) {
+    let Some(url) = ctx.env.DISCORD_WEBHOOK_URL() else {
+        log::warn!("Dinner bell rung, but DISCORD_WEBHOOK_URL is not set");
+        return;
+    };
+    // Ping the owner, if set and they're awake. Nothing a visitor types can
+    // ping anyone (@everyone, roles, users): only this one user may be
+    // mentioned.
+    let ping = ctx
+        .env
+        .DISCORD_PING_USER_ID()
+        .filter(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
+        .filter(|_| !owner_asleep(ctx.timestamp));
+    let mut content = bell_text(&ring);
+    if let Some(id) = &ping {
+        content = format!("<@{id}> {content}");
+    }
+    let body = serde_json::json!({
+        "content": content,
+        "allowed_mentions": { "parse": [], "users": ping.into_iter().collect::<Vec<_>>() },
+    })
+    .to_string();
+    let request = match Request::builder()
+        .uri(url)
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .extension(Timeout::from(TimeDuration::from(Duration::from_millis(500))))
+        .body(body)
+    {
+        Ok(request) => request,
+        Err(error) => {
+            log::error!("Dinner bell: bad webhook URL: {error}");
+            return;
+        }
+    };
+    match ctx.http.send(request) {
+        Ok(response) if response.status().is_success() => log::info!("Dinner bell sent"),
+        Ok(response) => log::error!("Dinner bell: Discord answered {}", response.status()),
+        Err(error) => log::error!("Dinner bell: request failed: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Seconds since the epoch of a UTC date and time
+    fn utc(year: i64, month: i64, day: i64, hour: i64, minute: i64) -> i64 {
+        days_from_civil(year, month, day) * 86_400 + hour * 3600 + minute * 60
+    }
+
+    #[test]
+    fn central_european_time() {
+        // Winter: UTC+1
+        assert_eq!(central_european_hour(utc(2026, 11, 19, 13, 30)), 14);
+        assert_eq!(central_european_hour(utc(2027, 1, 1, 23, 0)), 0);
+        // Summer: UTC+2
+        assert_eq!(central_european_hour(utc(2026, 7, 1, 5, 59)), 7);
+        // Clocks go forward at 01:00 UTC on 2026-03-29
+        assert_eq!(central_european_hour(utc(2026, 3, 29, 0, 59)), 1);
+        assert_eq!(central_european_hour(utc(2026, 3, 29, 1, 0)), 3);
+        // ...and back at 01:00 UTC on 2026-10-25
+        assert_eq!(central_european_hour(utc(2026, 10, 25, 0, 59)), 2);
+        assert_eq!(central_european_hour(utc(2026, 10, 25, 1, 0)), 2);
+        assert_eq!(central_european_hour(utc(2026, 10, 25, 2, 0)), 3);
+        // Year boundaries and leap days
+        assert_eq!(year_from_days(days_from_civil(2028, 2, 29)), 2028);
+        assert_eq!(year_from_days(days_from_civil(2026, 12, 31)), 2026);
+        assert_eq!(year_from_days(days_from_civil(2027, 1, 1)), 2027);
+    }
+
+    #[test]
+    fn bedtime() {
+        let at = |seconds: i64| Timestamp::from_micros_since_unix_epoch(seconds * 1_000_000);
+        // 19:59 and 20:00 CET
+        assert!(!owner_asleep(at(utc(2026, 11, 19, 18, 59))));
+        assert!(owner_asleep(at(utc(2026, 11, 19, 19, 0))));
+        // 07:59 and 08:00 CEST
+        assert!(owner_asleep(at(utc(2026, 7, 1, 5, 59))));
+        assert!(!owner_asleep(at(utc(2026, 7, 1, 6, 0))));
+    }
 }

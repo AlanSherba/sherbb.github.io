@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
 import { startMultiplayer } from "../multiplayer/connection";
 import {
   MultiplayerStatus as Status,
   useMultiplayer,
 } from "../multiplayer/store";
+import DinnerBell, { BellIcon } from "./DinnerBell";
 
 const LABELS: Record<Status, string> = {
   connecting: "Connecting",
@@ -49,24 +50,105 @@ const Tutorial = () => (
   </div>
 );
 
-// Connection status in the bottom-left corner. Mounting it opens the
-// multiplayer connection.
+// The chips beside the status pill, shown while connected. Each opens a
+// panel above the bar; one panel is open at a time.
+interface Chip {
+  id: string;
+  label: string;
+  // Shown above the chip while it's hovered (and its panel is closed)
+  tooltip: string;
+  // The chip's color while its panel is open, and the tooltip's
+  color: string;
+  icon: ReactNode;
+  // Stays mounted while closed, so a half-typed message survives closing
+  Panel: ComponentType<{ open: boolean }>;
+}
+
+const CHIPS: Chip[] = [
+  {
+    id: "bell",
+    label: "Dinner bell",
+    tooltip: "Ping me",
+    color: "bg-mode-projects",
+    icon: <BellIcon />,
+    Panel: DinnerBell,
+  },
+];
+
+// Connection status in the bottom-left corner, with the chips. Mounting it
+// opens the multiplayer connection.
 const MultiplayerStatus = () =>
 {
   const { status } = useMultiplayer();
+  const connected = status === "connected";
+  const [openChip, setOpenChip] = useState<string | null>(null);
+  const bar = useRef<HTMLDivElement>(null);
 
   useEffect(startMultiplayer, []);
 
+  // Panels close when the connection drops, on Escape, and on a click
+  // anywhere outside the bar
+  const panelOpen = connected && openChip !== null;
+  useEffect(() =>
+  {
+    if (!panelOpen)
+    {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) =>
+    {
+      if (event.key === "Escape")
+      {
+        setOpenChip(null);
+      }
+    };
+    const onPointerDown = (event: PointerEvent) =>
+    {
+      if (!bar.current?.contains(event.target as Node))
+      {
+        setOpenChip(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () =>
+    {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [panelOpen]);
+
   return (
-    <div className="group fixed bottom-0 left-0 z-20">
-      <Tutorial />
-      <div
-        className={`flex cursor-default items-center gap-1.5 px-2 py-1 font-mono text-xs text-black ${COLORS[status]}`}
-        role="status"
-      >
-        <Globe />
-        {LABELS[status]}
+    <div ref={bar} className="fixed bottom-0 left-0 z-20 flex gap-px">
+      <div className={`relative ${panelOpen ? "" : "group"}`}>
+        <Tutorial />
+        <div
+          className={`flex h-full cursor-default items-center gap-1.5 px-2 py-1 font-mono text-xs text-black ${COLORS[status]}`}
+          role="status"
+        >
+          <Globe />
+          {LABELS[status]}
+        </div>
       </div>
+      {connected &&
+        CHIPS.map(({ id, label, tooltip, color, icon }) => (
+          <div key={id} className={`relative flex ${panelOpen ? "" : "group/chip"}`}>
+            <p aria-hidden="true" className={`pointer-events-none invisible absolute bottom-full left-1/2 mb-4 -translate-x-1/2 whitespace-nowrap px-5 py-1 font-serif text-3xl text-white opacity-0 transition-opacity duration-150 group-hover/chip:visible group-hover/chip:opacity-100 ${color}`}>
+              {tooltip}
+            </p>
+            <button
+              type="button"
+              className={`flex items-center px-1.5 text-black transition-colors ${openChip === id ? color : "bg-neutral-500 hover:bg-neutral-400"}`}
+              aria-label={label}
+              aria-expanded={openChip === id}
+              onClick={() => setOpenChip(openChip === id ? null : id)}
+            >
+              {icon}
+            </button>
+          </div>
+        ))}
+      {connected &&
+        CHIPS.map(({ id, Panel }) => <Panel key={id} open={openChip === id} />)}
     </div>
   );
 };

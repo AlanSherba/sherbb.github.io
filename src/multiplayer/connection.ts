@@ -1,5 +1,5 @@
 import { DbConnection, SubscriptionHandle } from "../module_bindings";
-import { Chat as ChatRow, Cursor as CursorRow } from "../module_bindings/types";
+import { Bell as BellRow, Chat as ChatRow, Cursor as CursorRow } from "../module_bindings/types";
 import {
   CURSOR_UPDATES_PER_SECOND,
   clearCursors,
@@ -22,7 +22,8 @@ import {
 // page; the SDK reconnects on its own if the connection drops.
 //
 // Bandwidth: the tab sends one small message when its page changes, and
-// receives only the per-page reader counts, and only the counts that change.
+// receives only the per-page reader counts, and only the counts that change
+// (plus the dinner bell's single row, which changes once per ring).
 // Cursors: the tab sends its cursor at most CURSOR_UPDATES_PER_SECOND times a
 // second (see cursors.ts), only when it moved and only while someone else is
 // on the same page, and receives only the cursors on its own page.
@@ -276,6 +277,28 @@ const trackPointer = () =>
   window.setInterval(sendCursor, 1000 / CURSOR_UPDATES_PER_SECOND);
 };
 
+// ---- Dinner bell ----
+
+const showBell = (row: BellRow | null) =>
+  updateMultiplayerState({
+    bell: row && {
+      rungAt: Number(row.rungAt.toMillis()),
+      readyAt: Number(row.readyAt.toMillis()),
+    },
+  });
+
+// Ring the dinner bell, which sends the site owner a Discord message.
+// Rejects with the server's reason if the bell can't be rung (for example
+// while it's cooling down after the last ring).
+export const ringBell = async (message: string) =>
+{
+  if (!connection || !connected)
+  {
+    throw new Error("Not connected");
+  }
+  await connection.reducers.ringBell({ message });
+};
+
 const countReaders = (conn: DbConnection) =>
 {
   const readers = new Map(
@@ -323,10 +346,13 @@ const connect = (token: string | undefined) =>
       conn.db.chat.onInsert((_ctx, row) => showChat(row));
       conn.db.chat.onUpdate((_ctx, _old, row) => showChat(row));
       conn.db.chat.onDelete((_ctx, row) => hideChat(row));
+      conn.db.bell.onInsert((_ctx, row) => showBell(row));
+      conn.db.bell.onUpdate((_ctx, _old, row) => showBell(row));
+      conn.db.bell.onDelete(() => showBell(null));
       conn
         .subscriptionBuilder()
         .onApplied(recount)
-        .subscribe("SELECT * FROM page_readers");
+        .subscribe(["SELECT * FROM page_readers", "SELECT * FROM bell"]);
       onConnected(conn);
     })
     .onAutomaticReconnect((conn) => onConnected(conn))

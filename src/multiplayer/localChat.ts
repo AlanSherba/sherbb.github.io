@@ -20,6 +20,8 @@ import { addToCursorLayer } from "./cursors";
 // the mouse next moves after chat closes. While chat is
 // available the page itself gets no keyboard input: keys that would scroll
 // or move focus (Space, arrows, Page Up/Down, Home/End, Tab) are swallowed.
+// Text fields on the page (like the dinner bell's message) still get their
+// keys.
 
 // How long chat stays open after the last keystroke: a base time plus a
 // little per character, so longer messages can be read
@@ -192,9 +194,16 @@ function onInput()
   restartIdleTimer();
 }
 
+// A text field on the page (not the chat's own hidden one) that should get
+// keys as usual
+const isOtherTextField = (target: EventTarget | null) =>
+  target !== input &&
+  target instanceof HTMLElement &&
+  (target.isContentEditable || target.matches("input, textarea, select"));
+
 const onKeyDown = (event: KeyboardEvent) =>
 {
-  if (!connection?.available())
+  if (!connection?.available() || isOtherTextField(event.target))
   {
     return;
   }

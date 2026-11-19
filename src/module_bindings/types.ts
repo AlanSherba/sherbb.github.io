@@ -10,6 +10,22 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Bell = __t.object("Bell", {
+  id: __t.u8(),
+  rungAt: __t.timestamp(),
+  readyAt: __t.timestamp(),
+});
+export type Bell = __Infer<typeof Bell>;
+
+export const BellRing = __t.object("BellRing", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  message: __t.string(),
+  location: __t.string(),
+  readers: __t.u32(),
+});
+export type BellRing = __Infer<typeof BellRing>;
+
 export const Chat = __t.object("Chat", {
   connectionId: __t.connectionId(),
   page: __t.u32(),

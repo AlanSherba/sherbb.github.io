@@ -543,6 +543,7 @@ name = "sherbb_site"
 version = "0.1.0"
 dependencies = [
  "log",
+ "serde_json",
  "spacetimedb",
 ]
 

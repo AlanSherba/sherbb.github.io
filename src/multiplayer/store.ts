@@ -18,6 +18,15 @@ export interface MultiplayerState {
   location: string;
   // The location the server has counted this tab at
   confirmedLocation: string;
+  // The dinner bell's last ring, or null if it was never rung
+  bell: BellState | null;
+}
+
+// Times in milliseconds since the Unix epoch, by the server's clock
+export interface BellState {
+  rungAt: number;
+  // When the bell can next be rung
+  readyAt: number;
 }
 
 let state: MultiplayerState = {
@@ -25,6 +34,7 @@ let state: MultiplayerState = {
   readers: new Map(),
   location: "",
   confirmedLocation: "",
+  bell: null,
 };
 const listeners = new Set<() => void>();
 

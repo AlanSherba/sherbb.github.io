@@ -36,12 +36,14 @@ import {
 // Import all reducer arg schemas
 import CloseChatReducer from "./close_chat_reducer";
 import MoveCursorReducer from "./move_cursor_reducer";
+import RingBellReducer from "./ring_bell_reducer";
 import SetChatReducer from "./set_chat_reducer";
 import SetLocationReducer from "./set_location_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import BellRow from "./bell_table";
 import ChatRow from "./chat_table";
 import CursorRow from "./cursor_table";
 import PageReadersRow from "./page_readers_table";
@@ -50,6 +52,17 @@ import PageReadersRow from "./page_readers_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  bell: __table({
+    name: 'bell',
+    indexes: [
+      { accessor: 'id', name: 'bell_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'bell_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BellRow),
   chat: __table({
     name: 'chat',
     indexes: [
@@ -95,6 +108,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("close_chat", CloseChatReducer),
   __reducerSchema("move_cursor", MoveCursorReducer),
+  __reducerSchema("ring_bell", RingBellReducer),
   __reducerSchema("set_chat", SetChatReducer),
   __reducerSchema("set_location", SetLocationReducer),
 );
