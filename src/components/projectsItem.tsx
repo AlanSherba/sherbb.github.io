@@ -24,9 +24,11 @@ const ProjectListItem = (props: ProjectListItemProps) => (
       <div className="absolute left-[-1.25rem] top-1/2 h-2.5 w-2.5 -translate-y-1/2 bg-accent" />
     )}
     {!props.selected && props.readers > 0 && (
-      <p className="absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap text-xs text-green-500">
-        {props.readers} •
-      </p>
+      // Drawn by CSS so it's never selected or copied (like PageTitle's note)
+      <p
+        className="absolute right-full top-1/2 mr-2 -translate-y-1/2 select-none whitespace-nowrap text-xs text-green-500 before:content-[attr(data-label)]"
+        data-label={`${props.readers} •`}
+      />
     )}
     <p
       className={

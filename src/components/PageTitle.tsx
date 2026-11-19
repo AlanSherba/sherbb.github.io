@@ -10,9 +10,12 @@ const PageTitle = ({ title, others = 0 }: PageTitleProps) => (
       {title}
     </h2>
     {others > 0 && (
-      <p className="font-mono text-sm text-green-500">
-        {others} {others === 1 ? "other" : "others"} reading right now
-      </p>
+      // The text is drawn by CSS (::before) rather than written into the
+      // page, so it's never selected or copied, even with Select All
+      <p
+        className="select-none font-mono text-xs text-green-500 before:content-[attr(data-label)]"
+        data-label={`${others} ${others === 1 ? "other" : "others"} reading right now`}
+      />
     )}
   </div>
 );
