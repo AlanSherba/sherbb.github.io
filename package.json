@@ -1,7 +1,7 @@
 {
   "name": "alan-app",
   "version": "0.1.0",
-  "homepage": "https://sherbb.github.io",
+  "homepage": "https://alansherba.com",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -29,7 +29,7 @@
   },
   "scripts": {
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build",
+    "deploy": "gh-pages -d build --nojekyll",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",

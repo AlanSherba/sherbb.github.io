@@ -167,7 +167,10 @@ const DinnerBell = ({ open }: DinnerBellProps) =>
         <h2 className="font-serif text-4xl leading-none">Dinner Bell</h2>
         <p className="font-mono text-base leading-relaxed">
           Ring the bell to let me know you are here and I might be able to
-          meet you. This sends a notification to my phone.
+          meet you.{" "}
+          <span className="underline underline-offset-4">
+            This sends a notification to my phone.
+          </span>
         </p>
       </div>
       {owner.asleep && (
