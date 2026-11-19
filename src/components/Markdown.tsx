@@ -1,15 +1,20 @@
-import ReactMarkdown, { Components } from "react-markdown";
+import ReactMarkdown, { Components, ExtraProps } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
+import { isVideoPath, resolveMediaUrl } from "../MarkdownFiles";
 
-// Bare file names point at public/images/blog/; full URLs and absolute
-// paths are used as written.
-const resolveMedia = (src = ""): string =>
-  /^([a-z]+:|\/)/i.test(src)
-    ? src
-    : process.env.PUBLIC_URL + "/images/blog/" + src;
-
-const isVideo = (src: string): boolean => /\.(mp4|webm)$/i.test(src);
+// True when a paragraph holds nothing but a single link
+const isLinkOnly = (node: ExtraProps["node"]): boolean =>
+{
+  const children = (node?.children ?? []).filter(
+    (child) => !(child.type === "text" && child.value.trim() === ""),
+  );
+  return (
+    children.length === 1 &&
+    children[0].type === "element" &&
+    children[0].tagName === "a"
+  );
+};
 
 // Body text uses translucent color rather than opacity, so links and bold
 // text inside a paragraph can be brighter than the text around them.
@@ -41,7 +46,14 @@ const components: Components = {
   h6: ({ children }) => (
     <h6 className="pt-2 font-mono font-bold text-white/50">{children}</h6>
   ),
-  p: ({ children }) => <p className={BODY}>{children}</p>,
+  // A link on a line of its own is a call to action (like "Available on
+  // Steam"): larger serif text instead of inline body text.
+  p: ({ node, children }) =>
+    isLinkOnly(node) ? (
+      <p className="w-fit font-serif text-xl">{children}</p>
+    ) : (
+      <p className={BODY}>{children}</p>
+    ),
   a: ({ href, children }) =>
   {
     const external = !!href && /^https?:/i.test(href);
@@ -91,10 +103,10 @@ const components: Components = {
   hr: () => <hr className="border-white/10" />,
   img: ({ src, alt }) =>
   {
-    const url = resolveMedia(src);
-    return isVideo(url) ? (
+    const url = resolveMediaUrl(src);
+    return isVideoPath(url) ? (
       <video
-        className="box-border h-fit w-full"
+        className="box-border block h-fit w-full"
         src={url}
         autoPlay
         muted
@@ -102,7 +114,12 @@ const components: Components = {
         playsInline
       />
     ) : (
-      <img className="box-border h-fit w-full" src={url} alt={alt ?? ""} />
+      <img
+        className="box-border block h-fit w-full"
+        src={url}
+        alt={alt ?? ""}
+        loading="lazy"
+      />
     );
   },
   table: ({ children }) => (

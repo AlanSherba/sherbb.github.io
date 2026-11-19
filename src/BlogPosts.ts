@@ -1,3 +1,5 @@
+import { categoriesInOrder, loadMarkdownFiles, textField } from "./MarkdownFiles";
+
 // Blog posts are Markdown files in src/blog. The file name is the post's
 // URL slug (?tab=blog&post=<slug>). Each file starts with a header block:
 //
@@ -8,8 +10,8 @@
 //   category: Notes        (optional)
 //   ---
 //
-// Images and videos go in public/images/blog/ and are referenced by file
-// name only: ![alt](my-image.png)
+// Images and videos go in public/images/blog/ and are referenced relative
+// to public/images/: ![alt](blog/my-image.png)
 
 export interface BlogPost {
   slug: string;
@@ -20,66 +22,30 @@ export interface BlogPost {
   body: string;
 }
 
-const DEFAULT_CATEGORY = "Posts";
-
-// Each .md file is bundled as a static asset; require gives back its URL
 const postFiles = require.context("./blog", false, /\.md$/);
 
-const HEADER = /^---\r?\n([\s\S]*?)\r?\n---[^\S\r\n]*(\r?\n|$)/;
+let loading: Promise<BlogPost[]> | null = null;
 
-const parsePost = (slug: string, text: string): BlogPost =>
+// Loaded once and shared. Newest first; ISO dates sort correctly as strings.
+export const loadBlogPosts = (): Promise<BlogPost[]> =>
 {
-  const match = text.match(HEADER);
-  const fields: Record<string, string> = {};
-  if (match)
-  {
-    for (const line of match[1].split(/\r?\n/))
-    {
-      const colon = line.indexOf(":");
-      if (colon < 0)
-      {
-        continue;
-      }
-      const key = line.slice(0, colon).trim().toLowerCase();
-      // Allow optional quotes around the value
-      const value = line
-        .slice(colon + 1)
-        .trim()
-        .replace(/^(["'])(.*)\1$/, "$2");
-      fields[key] = value;
-    }
-  }
-
-  return {
-    slug,
-    title: fields.title || slug,
-    subtitle: fields.subtitle || "",
-    date: fields.date || "",
-    category: fields.category || DEFAULT_CATEGORY,
-    body: match ? text.slice(match[0].length) : text,
-  };
-};
-
-export const loadBlogPosts = async (): Promise<BlogPost[]> =>
-{
-  const keys = postFiles.keys().filter((key) => key.startsWith("./"));
-  const posts = await Promise.all(
-    keys.map(async (key) =>
-    {
-      const asset = postFiles(key) as string | { default: string };
-      const url = typeof asset === "string" ? asset : asset.default;
-      const text = await (await fetch(url)).text();
-      const slug = key.slice(2).replace(/\.md$/, "");
-      return parsePost(slug, text);
-    }),
+  loading ??= loadMarkdownFiles(postFiles).then((files) =>
+    files
+      .map((file) => ({
+        slug: file.slug,
+        title: textField(file, "title") || file.slug,
+        subtitle: textField(file, "subtitle"),
+        date: textField(file, "date"),
+        category: textField(file, "category") || "Posts",
+        body: file.body,
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date)),
   );
-  // Newest first. ISO dates sort correctly as strings.
-  return posts.sort((a, b) => b.date.localeCompare(a.date));
+  return loading;
 };
 
-// Category headers in the order they first appear in the sorted list
-export const blogCategories = (posts: readonly BlogPost[]): string[] =>
-  Array.from(new Set(posts.map((post) => post.category)));
+export const blogCategories = (posts: readonly BlogPost[]) =>
+  categoriesInOrder(posts);
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",

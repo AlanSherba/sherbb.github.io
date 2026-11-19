@@ -2,103 +2,92 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BlogPost, blogCategories, loadBlogPosts } from "./BlogPosts";
 import BlogPostView from "./components/BlogPostView";
 import ContentList, { ListEntry } from "./components/ContentList";
+import Markdown from "./components/Markdown";
 import ModeTabs, { SiteMode } from "./components/ModeTabs";
 import
 {
-  ProjectCategories,
-  ProjectData,
-  ProjectDatabase,
-} from "./ProjectsDatabase";
+  isVideoPath,
+  markdownMediaPaths,
+  resolveMediaUrl,
+} from "./MarkdownFiles";
+import { ProjectData, loadProjects, projectCategories } from "./Projects";
 
 import { useSearchParams } from "react-router-dom";
 
 const prefetchedImages: HTMLImageElement[] = [];
 
-const projectEntries: ListEntry[] = ProjectDatabase.map((project) => ({
-  key: project.title,
-  title: project.title,
-  subtitle: project.subtitle,
-  year: project.year,
-  category: project.category,
-}));
+// Pre-fetch all project media so project switching feels instant
+const prefetchProjectMedia = (projects: readonly ProjectData[]) =>
+{
+  projects.forEach((project) =>
+  {
+    markdownMediaPaths(project.body).forEach((mediaPath) =>
+    {
+      const url = resolveMediaUrl(mediaPath);
+      if (isVideoPath(mediaPath))
+      {
+        const link = document.createElement("link");
+        link.rel = "prefetch";
+        link.as = "video";
+        link.href = url;
+        document.head.appendChild(link);
+      }
+      else
+      {
+        const img = new Image();
+        img.src = url;
+        prefetchedImages.push(img);
+      }
+    });
+  });
+};
 
 function App()
 {
   const [searchParams, setSearchParams] = useSearchParams();
   const mode: SiteMode = searchParams.get("tab") === "blog" ? "blog" : "projects";
 
-  // Pre-fetch all project media after page load so project switching feels instant
-  useEffect(() => {
-    const prefetch = () => {
-      ProjectDatabase.forEach((project) => {
-        project.media.forEach((mediaPath) => {
-          const url = process.env.PUBLIC_URL + "/images/" + mediaPath;
-          if (mediaPath.toLowerCase().endsWith(".mp4")) {
-            const link = document.createElement("link");
-            link.rel = "prefetch";
-            link.as = "video";
-            link.href = url;
-            document.head.appendChild(link);
-          } else {
-            const img = new Image();
-            img.src = url;
-            prefetchedImages.push(img);
-          }
-        });
-      });
-    };
-
-    if (document.readyState === "complete") {
-      prefetch();
-    } else {
-      window.addEventListener("load", prefetch);
-      return () => window.removeEventListener("load", prefetch);
-    }
-  }, []);
-
-  const initProject = () =>
-  {
-    for (let i = 0; i < ProjectDatabase.length; i++)
-    {
-      if (searchParams.get("project") === ProjectDatabase[i].title)
-      {
-        return ProjectDatabase[i];
-      }
-    }
-    return ProjectDatabase[0];
-  };
-
-  // Storing the page state in URL param lets you share a link to a project
-  // and use browser BACK between projects.
-  useEffect(() =>
-  {
-    // Keep the last viewed project while on another tab
-    if (searchParams.get("tab") === "blog")
-    {
-      return;
-    }
-    for (let i = 0; i < ProjectDatabase.length; i++)
-    {
-      if (searchParams.get("project") === ProjectDatabase[i].title)
-      {
-        setSelectedProject(ProjectDatabase[i]);
-        return;
-      }
-    }
-    setSelectedProject(ProjectDatabase[0]);
-  }, [searchParams]);
-
-  const [selectedProject, setSelectedProject] =
-    useState<ProjectData>(initProject());
-
-  // Blog posts load once in the background; null until they arrive
+  // Projects and blog posts load once in the background; null until they arrive
+  const [projects, setProjects] = useState<ProjectData[] | null>(null);
   const [posts, setPosts] = useState<BlogPost[] | null>(null);
   useEffect(() =>
   {
+    loadProjects()
+      .then(setProjects)
+      .catch(() => setProjects([]));
     loadBlogPosts()
       .then(setPosts)
       .catch(() => setPosts([]));
   }, []);
+
+  // Once projects are known and the page has loaded, fetch their media
+  useEffect(() =>
+  {
+    if (!projects)
+    {
+      return;
+    }
+    const prefetch = () => prefetchProjectMedia(projects);
+    if (document.readyState === "complete")
+    {
+      prefetch();
+      return;
+    }
+    window.addEventListener("load", prefetch);
+    return () => window.removeEventListener("load", prefetch);
+  }, [projects]);
+
+  const projectEntries: ListEntry[] = useMemo(
+    () =>
+      (projects ?? []).map((project) => ({
+        key: project.title,
+        title: project.title,
+        subtitle: project.subtitle,
+        year: project.year,
+        category: project.category,
+      })),
+    [projects],
+  );
 
   const postEntries: ListEntry[] = useMemo(
     () =>
@@ -112,20 +101,34 @@ function App()
     [posts],
   );
 
+  // Storing the page state in URL params lets you share a link to a project
+  // or post and use browser BACK between them.
+  // The project in the URL, or the first one
+  const projectParam = searchParams.get("project");
+  const selectedProject =
+    projects?.find((project) => project.title === projectParam) ??
+    projects?.[0];
+
   // The post in the URL, or the newest one
   const postParam = searchParams.get("post");
   const selectedPost =
     posts?.find((post) => post.slug === postParam) ?? posts?.[0];
 
-  // Remember the last post read, to return to it from the Projects tab
+  // Remember the last project and post viewed, to return to them when
+  // switching tabs
+  const lastProjectTitle = useRef<string | null>(null);
   const lastPostSlug = useRef<string | null>(null);
   useEffect(() =>
   {
+    if (mode === "projects" && selectedProject)
+    {
+      lastProjectTitle.current = selectedProject.title;
+    }
     if (mode === "blog" && selectedPost)
     {
       lastPostSlug.current = selectedPost.slug;
     }
-  }, [mode, selectedPost]);
+  }, [mode, selectedProject, selectedPost]);
 
   const [contactOpen, setContactOpen] = useState(false);
   const descriptionRef = useRef<HTMLElement>(null);
@@ -134,7 +137,7 @@ function App()
   useEffect(() =>
   {
     descriptionRef.current?.scrollTo(0, 0);
-  }, [selectedProject, selectedPost?.slug, mode]);
+  }, [selectedProject?.title, selectedPost?.slug, mode]);
 
   const setMode = (newMode: SiteMode) =>
   {
@@ -151,7 +154,9 @@ function App()
       );
       return;
     }
-    setSearchParams({ project: selectedProject.title });
+    setSearchParams(
+      lastProjectTitle.current ? { project: lastProjectTitle.current } : {},
+    );
   };
 
   const setPost = (slug: string) =>
@@ -165,18 +170,11 @@ function App()
 
   const setProject = (projectTitle: string) =>
   {
-    if (projectTitle === selectedProject.title)
+    if (projectTitle === selectedProject?.title)
     {
       return;
     }
-    for (let i = 0; i < ProjectDatabase.length; i++)
-    {
-      if (ProjectDatabase[i].title === projectTitle)
-      {
-        setSearchParams({ project: ProjectDatabase[i].title });
-        return;
-      }
-    }
+    setSearchParams({ project: projectTitle });
   };
 
   const Header = () =>
@@ -245,9 +243,9 @@ function App()
         <ModeTabs mode={mode} onChange={setMode} />
         {mode === "projects" ? (
           <ContentList
-            categories={ProjectCategories}
+            categories={projectCategories(projects ?? [])}
             entries={projectEntries}
-            selectedKey={selectedProject.title}
+            selectedKey={selectedProject?.title}
             onSelect={setProject}
           />
         ) : (
@@ -287,59 +285,17 @@ function App()
 
   const Description = () =>
   {
+    if (!selectedProject)
+    {
+      return <main className="flex-1" />;
+    }
     return (
       <main ref={descriptionRef} className="flex-1 overflow-y-auto pb-16 pr-12">
         <div className="flex max-w-3xl flex-col gap-6">
           <h2 className="font-serif text-[3.5rem] leading-none text-white">
             {selectedProject.title}
           </h2>
-          <p className="whitespace-pre-line font-mono leading-relaxed text-white opacity-30">
-            {selectedProject.description}
-          </p>
-          {selectedProject.link && selectedProject.linkText && (
-            <a
-              className="w-fit font-serif text-xl text-accent underline-offset-2 opacity-70 hover:underline hover:opacity-100"
-              target="_blank"
-              rel="noopener noreferrer"
-              href={selectedProject.link}
-            >
-              {selectedProject.linkText}
-            </a>
-          )}
-
-          <div className="flex flex-col gap-6 pt-4">
-            {/* Projects with only a hero icon show it; others show their gallery */}
-            {(selectedProject.media.length > 1
-              ? selectedProject.media.slice(1)
-              : selectedProject.media
-            ).map((mediaString) =>
-            {
-              const lowerMediaString = mediaString.toLowerCase();
-              const isVideo =
-                lowerMediaString.endsWith(".mp4") ||
-                lowerMediaString.endsWith(".webm");
-              const mediaUrl =
-                process.env.PUBLIC_URL + "/images/" + mediaString;
-              return isVideo ? (
-                <video
-                  key={mediaString}
-                  className="box-border h-fit w-full"
-                  src={mediaUrl}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                />
-              ) : (
-                <img
-                  key={mediaString}
-                  className="box-border h-fit w-full"
-                  src={mediaUrl}
-                  alt=""
-                />
-              );
-            })}
-          </div>
+          <Markdown>{selectedProject.body}</Markdown>
         </div>
       </main>
     );

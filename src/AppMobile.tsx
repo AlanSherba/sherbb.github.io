@@ -1,9 +1,16 @@
+import { useEffect, useState } from "react";
+import Markdown from "./components/Markdown";
 import ProfileCard from "./components/profileCard";
-import {
-  ProjectDatabase,
-} from "./ProjectsDatabase";
+import { ProjectData, loadProjects } from "./Projects";
 
 function AppMobile() {
+  const [projects, setProjects] = useState<ProjectData[]>([]);
+  useEffect(() => {
+    loadProjects()
+      .then(setProjects)
+      .catch(() => setProjects([]));
+  }, []);
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <ProfileCard background={false} />
@@ -31,20 +38,14 @@ function AppMobile() {
         </a>
       </div>
 
-      <p className="pl-8 pr-8 text-center opacity-30">
-        View on desktop for project details
-      </p>
-
-      {ProjectDatabase.map((project) => (
-        <>
-          {project.media.slice(1).map((mediaURL) => (
-            <img
-              key={mediaURL}
-              className="object-fit box-border h-fit w-full rounded-[32px] border border-offwhite/[0.05]"
-              src={process.env.PUBLIC_URL + "/images/" + mediaURL}
-            />
-          ))}
-        </>
+      {/* Every project's full page, one after another */}
+      {projects.map((project) => (
+        <article key={project.title} className="flex flex-col gap-6 pt-8">
+          <h2 className="font-serif text-4xl leading-none text-white">
+            {project.title}
+          </h2>
+          <Markdown>{project.body}</Markdown>
+        </article>
       ))}
     </div>
   );
